@@ -1,6 +1,7 @@
 #ifndef ADB_PROCESS_HPP
 #define ADB_PROCESS_HPP
 
+#include <cstdint>
 #include <filesystem>
 #include <memory.h>
 #include <sys/types.h>
@@ -13,6 +14,13 @@ namespace adb {
         terminated
     };
 
+    struct stop_reason {
+        stop_reason(int wait_status);
+
+        process_state reason;
+        std::uint8_t info;
+    };
+
     class process {
         public:
             ~process();
@@ -20,7 +28,7 @@ namespace adb {
             static std::unique_ptr<process> attatch(pid_t pid); // Attatches to process based on PID
 
             void resume();
-            void wait_on_signal();
+            stop_reason wait_on_signal();
             // Getters
             pid_t pid() const { return pid_; }
             process_state state() const { return state_; }

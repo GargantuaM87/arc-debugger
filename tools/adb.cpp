@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <sched.h>
 #include <string_view>
@@ -9,48 +10,25 @@
 #include <sys/wait.h>
 #include <vector>
 #include <sstream>
+#include "../include/libadb/process.hpp"
+#include "../include/libadb/error.hpp"
 
 // Anonymous namespace so we can reuse the same names in different files
 namespace {
     /*
      * Attatch to a process.
      */
-    pid_t attatch(int argc, const char** argv) {
-        pid_t pid = 0;
+    std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
         // Passing PID
         if(argc == 3 && argv[1] == std::string_view("-p")) { // comparing string contents instead of memory contents
-            pid = std::atoi(argv[2]); // conversion from string to integer
-            if(pid <= 0) {
-                std::cerr << "Invalid pid" << std::endl;
-                return -1;
-            }
-            if(ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
-                std::perror("Could not attatch!");
-                return -1;
-            }
+            pid_t pid = std::atoi(argv[2]); // conversion from string to integer
+            return adb::process::attatch(pid);
         }
-        // Passing program name
+       // Passing program name
         else {
-            const char* program_path = argv[1];
-            if((pid = fork()) < 0) {
-                std::perror("Fork failed");
-                return -1;
-            }
-            if(pid == 0) {
-                // In child process, execute debugee
-                if(ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
-                    std::perror("Tracing failed");
-                    return -1;
-                }
-                // -l means arguments should be supplied individually instead of as an array
-                // -p means that the facility will search the PATH environment variable for the program name if the supplied path doesn't contain a /
-                if(execlp(program_path, program_path, nullptr) < 0) {
-                    std::perror("Exec failed");
-                    return -1;
-                }
-            }
-        }
-        return pid;
+           const char* program_path = argv[1];
+           return adb::process::launch(program_path);
+       }
     }
 }
 namespace {
@@ -68,32 +46,61 @@ namespace {
         if(str.size() > of.size()) return false; // as a prefix of a word is supposed to be smaller
         return std::equal(str.begin(), str.end(), of.begin()); // if the string has any occurence of the prefix word
     }
-    // Causes the OS to resume the execution of a process
-    void resume(pid_t pid) {
-        if(ptrace(PTRACE_CONT, pid, nullptr, nullptr) < 0) {
-            std::cerr << "Couldn't continue" << std::endl;
-            std::exit(-1);
-        }
-    }
-    void wait_on_signal(pid_t pid) {
-        int wait_status = 0;
-        int options = 0;
-        if(waitpid(pid, &wait_status, options) < 0) {
-            std::perror("waitpid failed");
-            std::exit(-1);
-        }
-    }
+    void print_stop_reason(const adb::process& process, adb::stop_reason reason) {
+        std::cout << "Process " << process.pid() << ' ';
 
-    void handle_command(pid_t pid, std::string_view line) {
+       switch(reason.reason) {
+       case adb::process_state::exited:
+            std::cout << "exited with status " << static_cast<int>(reason.info);
+            break;
+       case adb::process_state::terminated:
+            std::cout << "terminated with signal " << sigabbrev_np(reason.info); // Gives SIGNAL abbreviation for Signal code
+            break;
+       case adb::process_state::stopped:
+            std::cout << "stopped with signal " << sigabbrev_np(reason.info);
+            break;
+       }
+       std::cout << std::endl;
+    }
+    void handle_command(std::unique_ptr<adb::process>& process, std::string_view line) {
         auto args = split(line, ' ');
         auto command = args[0];
 
         if(is_prefix(command, "continue")) {
-            resume(pid);
-            wait_on_signal(pid);
+            process->resume();
+            auto reason = process->wait_on_signal();
+            print_stop_reason(*process, reason);
         }
         else {
             std::cerr << "Unknown command" << std::endl;
+        }
+    }
+}
+namespace {
+    void main_loop(std::unique_ptr<adb::process>& process) {
+        char* line = nullptr;
+        while ((line = readline("adb> ")) != nullptr) {
+            std::string line_str;
+
+            if(line == std::string_view("")) {
+                free(line);
+                if(history_length > 0) {
+                    line_str = history_list()[history_length - 1]->line;
+                }
+            }
+            else {
+                line_str = line;
+                add_history(line);
+                free(line);
+            }
+            if(!line_str.empty()) {
+                try {
+                    handle_command(process, line_str);
+                }
+                catch(const adb::error& err) {
+                    std::cout << err.what() << std::endl;
+                }
+            }
         }
     }
 }
@@ -102,33 +109,11 @@ int main(int argc, const char** argv) {
         std::cerr << "No arguments given" << std::endl;
         return -1;
     }
-    pid_t pid = attatch(argc, argv);
-    int wait_status;
-    int options = 0;
-    if(waitpid(pid, &wait_status, options) < 0) {
-        std::perror("waitpid failed");
-        return -1;
+    try {
+        auto process = attatch(argc, argv);
+        main_loop(process);
     }
-
-    char* line = nullptr;
-    while((line = readline("adb> ")) != nullptr) {
-        std::string line_str; // hold the command to be executed. Can come from the user or the recent history
-
-        if(line == std::string_view("")) {
-            free(line);
-            if(history_length > 0) {
-                line_str = history_list()[history_length - 1]->line; // most recent line input from the user
-            }
-        }
-
-        else {
-            line_str = line;
-            add_history(line);
-            free(line);
-        }
-
-        if(!line_str.empty()) {
-            handle_command(pid, line_str);
-        }
+    catch(const adb::error& err) {
+        std::cout << err.what() << std::endl;
     }
 }
