@@ -1,13 +1,24 @@
 #include "../include/libadb/process.hpp"
 #include "../include/libadb/error.hpp"
+#include "../include/libadb/pipe.hpp"
 #include <csignal>
 #include <cstdlib>
+#include <cstring>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+namespace {
+    void exit_with_perror(adb::pipe& channel, std::string const& prefix) {
+        auto message = prefix + ": " + std::strerror(errno);
+        channel.write(reinterpret_cast<std::byte*>(message.data()), message.size());
+        exit(-1);
+    }
+}
+
 std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path) {
+    pipe channel(true); // close_on_exec = ture
     pid_t pid;
     if((pid = fork()) < 0) {
         // Error: Fork failed
@@ -15,13 +26,26 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path) {
     }
 
     if(pid == 0) {
+        // won't be needing this after we're inside the child process
+        channel.close_read(); // parent will close its write end. On the parent side, we read the other end and throw an exception if the child wrote anything to it
         if(ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
-            error::send_errno("tracing failed");
+            exit_with_perror(channel, "tracing failed");
         }
         if(execlp(path.c_str(), path.c_str(), nullptr) < 0) {
-            error::send_errno("exec failed");
+            exit_with_perror(channel, "exec failed");
         }
     }
+
+    channel.close_write();
+    auto data = channel.read();
+    channel.close_read();
+
+    if(data.size() > 0) {
+        waitpid(pid, nullptr, 0); // wait for child process to terminate
+        auto chars = reinterpret_cast<char*>(data.data());
+        error::send(std::string(chars, chars + data.size())); // issue error with given message read from child through pipe
+    }
+
     std::unique_ptr<process> proc (new process(pid, true)); // private constructor used within the own class
     proc->wait_on_signal();
 
