@@ -33,7 +33,7 @@ std::unique_ptr<adb::process> adb::process::attatch(pid_t pid) {
         error::send("Invalid PID");
     }
     if(ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
-        error::send("Could not attatch");
+        error::send_errno("Could not attatch");
     }
     std::unique_ptr<process> proc (new process(pid, false)); // terminate_on_end is false since we're not launching a process
     proc->wait_on_signal();
