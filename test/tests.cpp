@@ -3,6 +3,8 @@
 #include "../include/libadb/error.hpp"
 #include <cerrno>
 #include <signal.h>
+#include <string>
+#include <fstream>
 
 using namespace adb;
 
@@ -13,6 +15,16 @@ namespace {
         return ret != -1 and errno != ESRCH; // when kill fails, it returns -1 and sets errno to ESRCH (Error No Such Process)
     }
 }
+namespace {
+    char get_process_status(pid_t pid) {
+        std::ifstream stat("/proc/" + std::to_string(pid) + "/stat");
+        std::string data;
+        std::getline(stat, data);
+        auto idx_of_last_paren = data.rfind(')');
+        auto idx_of_stat_indicator = idx_of_last_paren + 2;
+        return data[idx_of_stat_indicator];
+    }
+}
 
 TEST_CASE("process::launch success", "[process]") {
     auto proc = process::launch("yes");
@@ -21,4 +33,14 @@ TEST_CASE("process::launch success", "[process]") {
 
 TEST_CASE("process::launch no such program", "[process]") {
     REQUIRE_THROWS_AS(process::launch("random_ahh_process"), error);
+}
+
+TEST_CASE("process::attatch success", "[process]") {
+    auto target = process::launch("./test/targets/run_endlessly", false);
+    auto proc = process::attatch(target->pid());
+    REQUIRE(get_process_status(target->pid()) == 't');
+}
+
+TEST_CASE("process::attatch invalid PID", "[process]") {
+    REQUIRE_THROWS_AS(process::attatch(0), error);
 }

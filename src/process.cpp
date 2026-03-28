@@ -16,8 +16,8 @@ namespace {
         exit(-1);
     }
 }
-
-std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path) {
+// We can launch a process with options to debug it or not
+std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, bool debug) {
     pipe channel(true); // close_on_exec = ture
     pid_t pid;
     if((pid = fork()) < 0) {
@@ -28,7 +28,7 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path) {
     if(pid == 0) {
         // won't be needing this after we're inside the child process
         channel.close_read(); // parent will close its write end. On the parent side, we read the other end and throw an exception if the child wrote anything to it
-        if(ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
+        if(debug and ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
             exit_with_perror(channel, "tracing failed");
         }
         if(execlp(path.c_str(), path.c_str(), nullptr) < 0) {
@@ -46,8 +46,10 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path) {
         error::send(std::string(chars, chars + data.size())); // issue error with given message read from child through pipe
     }
 
-    std::unique_ptr<process> proc (new process(pid, true)); // private constructor used within the own class
-    proc->wait_on_signal();
+    std::unique_ptr<process> proc (new process(pid, true, debug)); // private constructor used within the own class
+
+    if(debug)
+        proc->wait_on_signal();
 
     return proc;
 }
@@ -59,7 +61,7 @@ std::unique_ptr<adb::process> adb::process::attatch(pid_t pid) {
     if(ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
         error::send_errno("Could not attatch");
     }
-    std::unique_ptr<process> proc (new process(pid, false)); // terminate_on_end is false since we're not launching a process
+    std::unique_ptr<process> proc (new process(pid, false, true)); // terminate_on_end is false since we're not launching a process
     proc->wait_on_signal();
 
     return proc;
@@ -68,13 +70,14 @@ std::unique_ptr<adb::process> adb::process::attatch(pid_t pid) {
 adb::process::~process() {
     if(pid_ != 0) {
         int status;
-        if(state_ == process_state::running) {
-            kill(pid_, SIGSTOP); // Pause the process
-            waitpid(pid_, &status, 0);
+        if(is_attatched) {
+            if(state_ == process_state::running) {
+                kill(pid_, SIGSTOP); // Pause the process
+                waitpid(pid_, &status, 0);
+            }
+            ptrace(PTRACE_DETACH, pid_, nullptr, nullptr); // Detatch from the process
+            kill(pid_, SIGCONT); // Continue the process
         }
-        ptrace(PTRACE_DETACH, pid_, nullptr, nullptr); // Detatch from the process
-        kill(pid_, SIGCONT); // Continue the process
-
         if(terminate_on_end_) {
             kill(pid_, SIGKILL);
             waitpid(pid_, &status, 0);
