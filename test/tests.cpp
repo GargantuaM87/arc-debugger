@@ -17,12 +17,12 @@ namespace {
 }
 namespace {
     char get_process_status(pid_t pid) {
-        std::ifstream stat("/proc/" + std::to_string(pid) + "/stat");
+        std::ifstream stat("/proc/" + std::to_string(pid) + "/stat"); // input file stream
         std::string data;
-        std::getline(stat, data);
+        std::getline(stat, data); // read a line from stream 'stat' into string 'data'
         auto idx_of_last_paren = data.rfind(')');
-        auto idx_of_stat_indicator = idx_of_last_paren + 2;
-        return data[idx_of_stat_indicator];
+        auto idx_of_stat_indicator = idx_of_last_paren + 2; // displace after finding idx of parenthesis
+        return data[idx_of_stat_indicator]; // return the char representing process state
     }
 }
 
@@ -43,4 +43,30 @@ TEST_CASE("process::attatch success", "[process]") {
 
 TEST_CASE("process::attatch invalid PID", "[process]") {
     REQUIRE_THROWS_AS(process::attatch(0), error);
+}
+
+TEST_CASE("process::resume success", "[process]") {
+    // using different scopes to avoid name collisions within the same test case
+    {
+        auto proc = process::launch("./test/targets/run_endlessly");
+        proc->resume();
+        auto status = get_process_status(proc->pid());
+        auto success = status == 'R' or status =='S'; // should be running (R) or sleeping (S) when the proc is waiting to be scheduled by the OS
+        REQUIRE(success);
+    }
+    {
+        auto target = process::launch("./test/targets/run_endlessly", false);
+        auto proc = process::attatch(target->pid());
+        proc->resume();
+        auto status = get_process_status(proc->pid());
+        auto success = status == 'R' or status == 'S';
+        REQUIRE(success);
+    }
+}
+
+TEST_CASE("process::resume already terminated", "[process]") {
+    auto proc = process::launch("./test/targets/end_immediately");
+    proc->resume();
+    proc->wait_on_signal(); // waits for the process to terminate
+    REQUIRE_THROWS_AS(proc->resume(), error);
 }
