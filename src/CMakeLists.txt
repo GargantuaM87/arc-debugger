@@ -1,4 +1,4 @@
-add_library(libadb process.cpp pipe.cpp)
+add_library(libadb process.cpp pipe.cpp registers.cpp)
 add_library(adb::libadb ALIAS libadb)
 
 set_target_properties(

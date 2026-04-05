@@ -60,6 +60,9 @@ namespace adb {
 
         return *it;
     }
+    // functions to find register by ID, name, or DWARF ID
+    // inline keyword allows multiple definitons of one function to exist
+    // so we can define the definition in this header file instead of an implementation file
     inline const register_info& register_info_by_id(register_id id) {
         return register_info_by([id](auto& i) {return i.id == id; });
     }
