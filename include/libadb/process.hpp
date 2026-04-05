@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory.h>
 #include <sys/types.h>
+#include <sys/user.h>
 #include "./registers.hpp"
 
 namespace adb {
@@ -43,6 +44,9 @@ namespace adb {
             const registers& get_registers() const { return *registers_; }
 
             void write_user_area(std::size_t offset, std::uint64_t data);
+
+            void write_fprs(const user_fpregs_struct& fprs);
+            void write_gprs(const user_regs_struct& gprs);
 
         private:
             pid_t pid_ = 0;

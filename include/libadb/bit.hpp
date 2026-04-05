@@ -23,7 +23,6 @@ namespace adb {
     const std::byte* as_bytes(const From& from) {
         return reinterpret_cast<const std::byte*>(&from);
     }
-
     template <class From>
     byte128 to_byte128(From src) {
         byte128 ret{}; // initialize all elements to 0

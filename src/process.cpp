@@ -7,6 +7,7 @@
 #include <cstring>
 #include <sys/ptrace.h>
 #include <sys/types.h>
+#include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -150,5 +151,17 @@ void adb::process::write_user_area(std::size_t offset, std::uint64_t data) {
     // writing to debug registers or a single general purpose register at the given offset
     if(ptrace(PTRACE_POKEUSER, pid_, offset, data) < 0) {
         error::send_errno("Could not write to user area");
+    }
+}
+
+void adb::process::write_fprs(const user_fpregs_struct& fprs) {
+    if(ptrace(PTRACE_SETFPREGS, pid_, nullptr, &fprs) < 0) {
+        error::send_errno("Could not write floating point registers");
+    }
+}
+
+void adb::process::write_gprs(const user_regs_struct& gprs) {
+    if(ptrace(PTRACE_SETREGS, pid_, nullptr, &gprs) < 0) {
+        error::send_errno("Could not write general purpose registers");
     }
 }

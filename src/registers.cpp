@@ -1,6 +1,7 @@
 #include "../include/libadb/registers.hpp"
 #include "../include/libadb/bit.hpp"
 #include "../include/libadb/process.hpp"
+#include <cstdint>
 #include <exception>
 #include <iostream>
 
@@ -42,7 +43,7 @@ void adb::registers::write(const register_info& info, value val) {
     auto bytes = as_bytes(data_);
     // takes a function and a variant
     // calls the given function with the value stored in the variant
-    // the given function is a lambda
+    // the given function is a generic lambda
     std::visit([&](auto& v) {
         if(sizeof(v) == info.size) {
             auto val_bytes = as_bytes(v);
@@ -56,5 +57,14 @@ void adb::registers::write(const register_info& info, value val) {
         }
     }, val);
 
-    proc_->write_user_area(info.offset, from_bytes<std::uint64_t>(bytes + info.offset));
+
+    if(info.type == register_type::fpr) {
+        proc_->write_fprs(data_.i387);
+    }
+    else {
+        // bitwise AND operation to align high 8-bit register addresses
+        // Will set the lowest 3 bits in the adress to 0
+        auto aligned_offset = info.offset &~0b111;
+        proc_->write_user_area(aligned_offset, from_bytes<std::uint64_t>(bytes + aligned_offset));
+    }
 }
