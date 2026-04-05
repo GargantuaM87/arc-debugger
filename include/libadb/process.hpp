@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory.h>
 #include <sys/types.h>
+#include "./registers.hpp"
 
 namespace adb {
     enum class process_state {
@@ -37,13 +38,23 @@ namespace adb {
             process(const process&) = delete;
             process& operator=(const process&) = delete;
 
+            // Register functions
+            registers& get_registers() { return *registers_; }
+            const registers& get_registers() const { return *registers_; }
+
+            void write_user_area(std::size_t offset, std::uint64_t data);
+
         private:
             pid_t pid_ = 0;
             process_state state_ = process_state::stopped;
             bool terminate_on_end_ = true;
             bool is_attatched = true;
+            std::unique_ptr<registers> registers_;
 
-            process(pid_t pid, bool terminate_on_end, bool is_attatched) : pid_(pid), terminate_on_end_(terminate_on_end), is_attatched(is_attatched) { }
+            process(pid_t pid, bool terminate_on_end, bool is_attatched) : pid_(pid), terminate_on_end_(terminate_on_end),
+                                                                           is_attatched(is_attatched), registers_(new registers(*this)) { }
+
+            void read_all_registers(); // populate registers when the process halts
     };
 }
 

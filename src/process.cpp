@@ -2,6 +2,7 @@
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/pipe.hpp"
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <sys/ptrace.h>
@@ -100,6 +101,11 @@ adb::stop_reason adb::process::wait_on_signal() {
     }
     stop_reason reason(wait_status); // construct a new stop_reason object
     state_ = reason.reason; // set current process state to what made it stop
+
+    if(is_attatched and state_ == process_state::stopped) {
+        read_all_registers();
+    }
+
     return reason;
 }
 
@@ -115,5 +121,34 @@ adb::stop_reason::stop_reason(int wait_status) {
     else if(WIFSTOPPED(wait_status)) { // if a stop was due to a pause
         reason = process_state::stopped;
         info = WSTOPSIG(wait_status); // extract signal code
+    }
+}
+
+void adb::process::read_all_registers() {
+    // read all GPRs
+    if(ptrace(PTRACE_GETREGS, pid_, nullptr, &get_registers().data_.regs) < 0) {
+        error::send_errno("Could not read GPR registers");
+    }
+    // read all FPRs
+    if(ptrace(PTRACE_GETFPREGS, pid_, nullptr, &get_registers().data_.i387) < 0) {
+        error::send_errno("Could not read FPR registers");
+    }
+    // read debug registers
+    for(int i = 0; i < 8; ++i) {
+        auto id = static_cast<int>(register_id::dr0) + i;
+        auto info = register_info_by_id(static_cast<register_id>(id));
+
+        errno = 0; // set to 0 to signal for errors. If it is set to anything other than 0 after, then we have an error
+        std::int64_t data = ptrace(PTRACE_PEEKUSER, pid_, info.offset, nullptr); // read data from correct offset
+        if(errno != 0) error::send_errno("Could not read debug register");
+
+        get_registers().data_.u_debugreg[i] = data; // write retrieved data into registers_ member
+    }
+}
+
+void adb::process::write_user_area(std::size_t offset, std::uint64_t data) {
+    // writing to debug registers or a single general purpose register at the given offset
+    if(ptrace(PTRACE_POKEUSER, pid_, offset, data) < 0) {
+        error::send_errno("Could not write to user area");
     }
 }

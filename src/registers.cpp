@@ -46,8 +46,8 @@ void adb::registers::write(const register_info& info, value val) {
     std::visit([&](auto& v) {
         if(sizeof(v) == info.size) {
             auto val_bytes = as_bytes(v);
-            std::copy(val_bytes, val_bytes + sizeof(v),
-                bytes + info.offset);
+            std::copy(val_bytes, val_bytes + sizeof(v), // bytes of the stored value
+                bytes + info.offset);                   // then copy them into the correct place in the struct of registers
         }
         else {
             std::cerr << "adb::register::write called with "
@@ -55,4 +55,6 @@ void adb::registers::write(const register_info& info, value val) {
             std::terminate();
         }
     }, val);
+
+    proc_->write_user_area(info.offset, from_bytes<std::uint64_t>(bytes + info.offset));
 }
