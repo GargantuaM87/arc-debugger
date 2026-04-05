@@ -4,6 +4,32 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <type_traits>
+#include <algorithm>
+
+namespace {
+    template <class T>
+    adb::byte128 widen(const adb::register_info& info, T t) {
+        using namespace adb;
+        // if a floating point value, cast it to the widest relevant floating point type before casting to a byte128
+        if constexpr (std::is_floating_point_v<T>) { // this expression runs at compile tme
+            if(info.format == register_format::double_float)
+                return to_byte128(static_cast<double>(t));
+            if(info.format == register_format::long_double)
+                return to_byte128(static_cast<long double>(t));
+        }
+        else if constexpr (std::is_signed_v<T>) {
+            if(info.format == register_format::uint) {
+                switch(info.size) {
+                    case 2: return to_byte128(static_cast<std::int16_t>(t));
+                    case 4: return to_byte128(static_cast<std::int32_t>(t));
+                    case 8: return to_byte128(static_cast<std::int64_t>(t));
+                }
+            }
+        }
+        return to_byte128(t);
+    }
+}
 
 /**
  * 1. Get pointer to raw bytes of data
@@ -45,9 +71,10 @@ void adb::registers::write(const register_info& info, value val) {
     // calls the given function with the value stored in the variant
     // the given function is a generic lambda
     std::visit([&](auto& v) {
-        if(sizeof(v) == info.size) {
-            auto val_bytes = as_bytes(v);
-            std::copy(val_bytes, val_bytes + sizeof(v), // bytes of the stored value
+        if(sizeof(v) <= info.size) {
+            auto wide = widen(info, v); // can write smaller-sized values into registers safely
+            auto val_bytes = as_bytes(wide);
+            std::copy(val_bytes, val_bytes + info.size, // bytes of the stored value
                 bytes + info.offset);                   // then copy them into the correct place in the struct of registers
         }
         else {
