@@ -19,7 +19,7 @@ namespace {
     }
 }
 // We can launch a process with options to debug it or not
-std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, bool debug) {
+std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, bool debug, std::optional<int> stdout_replacement) {
     pipe channel(true); // close_on_exec = ture
     pid_t pid;
     if((pid = fork()) < 0) {
@@ -30,6 +30,11 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, b
     if(pid == 0) {
         // won't be needing this after we're inside the child process
         channel.close_read(); // parent will close its write end. On the parent side, we read the other end and throw an exception if the child wrote anything to it
+        if(stdout_replacement) {
+            if(dup2(*stdout_replacement, STDOUT_FILENO) < 0) {
+                exit_with_perror(channel, "stdout replacement failed");
+            }
+        }
         if(debug and ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
             exit_with_perror(channel, "tracing failed");
         }

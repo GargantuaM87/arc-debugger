@@ -1,10 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include "../include/libadb/process.hpp"
 #include "../include/libadb/error.hpp"
+#include "../include/libadb/pipe.hpp"
+#include "../include/libadb/bit.hpp"
 #include <cerrno>
 #include <signal.h>
 #include <string>
 #include <fstream>
+#include <string_view>
 
 using namespace adb;
 
@@ -69,4 +72,24 @@ TEST_CASE("process::resume already terminated", "[process]") {
     proc->resume();
     proc->wait_on_signal(); // waits for the process to terminate
     REQUIRE_THROWS_AS(proc->resume(), error);
+}
+
+TEST_CASE("Write register works", "[register]") {
+    bool close_on_exec = false;
+    adb::pipe channel(close_on_exec);
+
+    auto proc = process::launch("./test/targets/reg_write", true, channel.get_write());
+    channel.close_write();
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto& regs = proc->get_registers();
+    regs.write_by_id(register_id::rsi, 0xcafecafe);
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto output = channel.read();
+    REQUIRE(to_string_view(output) == "0xcafecafe");
 }

@@ -1,9 +1,11 @@
 #ifndef ADB_PROCESS_HPP
 #define ADB_PROCESS_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory.h>
+#include <optional>
 #include <sys/types.h>
 #include <sys/user.h>
 #include "./registers.hpp"
@@ -26,7 +28,8 @@ namespace adb {
     class process {
         public:
             ~process();
-            static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true); // Launches process based on path
+            static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true,
+                std::optional<int> stdout_replacement = std::nullopt); // Launches process based on path
             static std::unique_ptr<process> attatch(pid_t pid); // Attatches to process based on PID
 
             void resume();
