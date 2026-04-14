@@ -3,13 +3,14 @@
 .section .data
 
 hex_format: .asciz "%#x"
+float_format: .asciz "%.2f"
 
 .section .text
 
 .macro trap
-    movq $62, %rax # 62 is PID for kill
+    movq $62, %rax # 62 is syscall ID for kill
     movq %r12, %rdi
-    movq $5, %rsi # 5 is PID for SIGTRAP
+    movq $5, %rsi # 5 is signal ID for SIGTRAP
     syscall
 .endm
 
@@ -27,6 +28,23 @@ main:
     # Print contents of rsi
     leaq    hex_format(%rip), %rdi
     movq    $0, %rax
+    call    printf@plt
+    movq    $0, %rdi
+    call    fflush@plt
+    trap
+
+    # Print contents of mm0
+    movq    %mm0, %rsi
+    leaq    hex_format(%rip), %rdi
+    movq    $0, %rax
+    call    printf@plt
+    movq    $0, %rdi
+    call    fflush@plt
+    trap
+
+    # Print contents xmm0
+    leaq    float_format(%rip), %rdi
+    movq    $1, %rax    # vector argument, so we need this
     call    printf@plt
     movq    $0, %rdi
     call    fflush@plt
