@@ -80,7 +80,7 @@ TEST_CASE("Write register works", "[register]") {
 
     auto proc = process::launch("./test/targets/reg_write", true, channel.get_write());
     channel.close_write();
-
+    // Writing to GPR
     proc->resume();
     proc->wait_on_signal();
 
@@ -92,7 +92,7 @@ TEST_CASE("Write register works", "[register]") {
 
     auto output = channel.read();
     REQUIRE(to_string_view(output) == "0xcafecafe");
-
+    // Writing to MMX
     regs.write_by_id(register_id::mm0, 0xba5eba11);
 
     proc->resume();
@@ -100,12 +100,25 @@ TEST_CASE("Write register works", "[register]") {
 
     output = channel.read();
     REQUIRE(to_string_view(output) == "0xba5eba11");
-
+    // Writing to SSE
     regs.write_by_id(register_id::xmm0, 42.24);
 
     proc->resume();
     proc->wait_on_signal();
 
     output = channel.read();
+    REQUIRE(to_string_view(output) == "42.24");\
+    // Writing to x87
+    regs.write_by_id(register_id::st0, 42.24l);
+    regs.write_by_id(register_id::fsw,
+        std::uint16_t{0b0011100000000000});
+    regs.write_by_id(register_id::ftw,
+        std::uint16_t{0b0011111111111111});
+    proc->resume();
+    proc->wait_on_signal();
+
+    output = channel.read();
     REQUIRE(to_string_view(output) == "42.24");
+
+
 }
