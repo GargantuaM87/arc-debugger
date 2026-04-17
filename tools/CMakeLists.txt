@@ -1,5 +1,5 @@
 add_executable(adb adb.cpp)
-target_link_libraries(adb PRIVATE adb::libadb PkgConfig::libedit)
+target_link_libraries(adb PRIVATE adb::libadb PkgConfig::libedit fmt::fmt)
 
 include(GNUInstallDirs)
 install(

@@ -32,6 +32,7 @@ trap
 # Store to mm0
 movq    $0xba5eba11, %r13
 movq    %r13, %mm0
+trap
 
 # Store to xmm0
 movsd  my_double(%rip), %xmm0

@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/user.h>
 #include "./registers.hpp"
+#include "./types.hpp"
 
 namespace adb {
     enum class process_state {
@@ -50,6 +51,12 @@ namespace adb {
 
             void write_fprs(const user_fpregs_struct& fprs);
             void write_gprs(const user_regs_struct& gprs);
+            // obtaining the program counter
+            virt_addr get_pc() const {
+                return virt_addr{
+                    get_registers().read_by_id_as<std::uint64_t>(register_id::rip)
+                };
+            }
 
         private:
             pid_t pid_ = 0;
