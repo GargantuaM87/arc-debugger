@@ -1,1 +1,6 @@
-A process debugger being written with the guide of several resources. Started this project because I have some unknown memory leak on my system and writing this seemed like a fun challenge to undertake.
+# arcDebugger
+A process debugging tool that is currently work in progress.
+## Features
+- Launches and Attatches to processes in order to debug
+- Write to registers and read from them
+  
