@@ -170,3 +170,9 @@ void adb::process::write_gprs(const user_regs_struct& gprs) {
         error::send_errno("Could not write general purpose registers");
     }
 }
+
+adb::breakpoint_site& adb::process::create_breakpoint_site(virt_addr adress) {
+    if(breakpoint_sites_.contains_adress(adress)) {
+
+    }
+}

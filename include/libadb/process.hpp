@@ -12,6 +12,7 @@
 #include "./registers.hpp"
 #include "./types.hpp"
 #include "./breakpoint_site.hpp"
+#include "./stopPoint_collection.hpp"
 
 namespace adb {
     enum class process_state {
@@ -61,6 +62,9 @@ namespace adb {
             }
             // breakpoint_site stuff
             breakpoint_site& create_breakpoint_site(virt_addr address);
+            // to return our breakpoint sites. Const overload to maintain const correctness.
+            stopPoint_collection<breakpoint_site>& breakpoint_sites() { return breakpoint_sites_; }
+            const stopPoint_collection<breakpoint_site>& breakpoint_sites() const { return breakpoint_sites_; }
 
         private:
             pid_t pid_ = 0;
@@ -68,7 +72,7 @@ namespace adb {
             bool terminate_on_end_ = true;
             bool is_attatched = true;
             std::unique_ptr<registers> registers_;
-            std::vector<std::unique_ptr<breakpoint_site>> breakpoint_sites_;
+            stopPoint_collection<breakpoint_site> breakpoint_sites_;
 
             process(pid_t pid, bool terminate_on_end, bool is_attatched) : pid_(pid), terminate_on_end_(terminate_on_end),
                                                                            is_attatched(is_attatched), registers_(new registers(*this)) { }
