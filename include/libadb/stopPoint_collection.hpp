@@ -11,10 +11,7 @@ namespace adb {
     template <class StopPoint>
     class stopPoint_collection {
         public:
-            StopPoint& push(std::unique_ptr<StopPoint> bs) {
-                stopPoints_.push_back(std::move(bs));
-                return stopPoints_.back();
-            }
+            StopPoint& push(std::unique_ptr<StopPoint> bs);
 
             bool contains_id(typename StopPoint::id_type id) const;
             bool contains_address(virt_addr address) const;
@@ -45,6 +42,15 @@ namespace adb {
 
             points_t stopPoints_;
     };
+}
+// Push
+namespace adb {
+    template <class StopPoint>
+    StopPoint& stopPoint_collection<StopPoint>::push(std::unique_ptr<StopPoint> breaksite)
+    {
+        stopPoints_.push_back(std::move(breaksite));
+        return *stopPoints_.back();
+    }
 }
 // Iterators
 namespace adb {
@@ -96,12 +102,59 @@ namespace adb {
         auto it = find_by_id(id);
         if(it == end(stopPoints_))
             error::send("Invalid stopPoint id");
-        return **it;
+        return **it; // dereference twice. Once for the iterator. Twice for the unique_ptr it references
     }
 
     template <class StopPoint>
     const StopPoint& stopPoint_collection<StopPoint>::get_by_id(typename StopPoint::id_type id) const {
         return const_cast<stopPoint_collection*>(this)->get_by_id(id);
+    }
+
+    template <class StopPoint>
+    StopPoint& stopPoint_collection<StopPoint>::get_by_address(virt_addr address) {
+        auto it = find_by_address(address);
+        if(it == end(stopPoints_))
+            error::send("StopPoint with given address not found");
+        return **it;
+    }
+
+    template<class StopPoint>
+    const StopPoint& stopPoint_collection<StopPoint>::get_by_address(virt_addr address) const {
+        return const_cast<stopPoint_collection*>(this)->get_by_address(address);
+    }
+}
+// Remove Functions
+namespace adb {
+    template <class StopPoint>
+    void stopPoint_collection<StopPoint>::remove_by_id(typename StopPoint::id_type id) {
+        auto it = find_by_id(id);
+        (**it).disable();
+        stopPoints_.erase(it);
+    }
+
+    template <class StopPoint>
+    void stopPoint_collection<StopPoint>::remove_by_address(virt_addr address) {
+        auto it = find_by_address(address);
+        (**it).disable();
+        stopPoints_.erase(it);
+    }
+}
+// For-Each Functions
+namespace adb {
+    template <class StopPoint>
+    template <class F>
+    void stopPoint_collection<StopPoint>::for_each(F f) {
+        for(auto& point : stopPoints_) {
+            f(*point);
+        }
+    }
+
+    template <class StopPoint>
+    template <class F>
+    void stopPoint_collection<StopPoint>::for_each(F f) const {
+        for(const auto& point : stopPoints_) {
+            f(*point);
+        }
     }
 }
 #endif
