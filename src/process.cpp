@@ -11,6 +11,7 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/personality.h>
 
 namespace {
     void exit_with_perror(adb::pipe& channel, std::string const& prefix) {
@@ -26,6 +27,10 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, b
     if((pid = fork()) < 0) {
         // Error: Fork failed
         error::send_errno("fork failed");
+    }
+
+    if(pid == 0) {
+        personality(ADDR_NO_RANDOMIZE);
     }
 
     if(pid == 0) {
