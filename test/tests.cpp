@@ -5,10 +5,14 @@
 #include "../include/libadb/bit.hpp"
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <regex>
 #include <signal.h>
 #include <string>
 #include <fstream>
 #include <string_view>
+#include <elf.h>
 
 using namespace adb;
 
@@ -27,6 +31,35 @@ namespace {
         auto idx_of_last_paren = data.rfind(')');
         auto idx_of_stat_indicator = idx_of_last_paren + 2; // displace after finding idx of parenthesis
         return data[idx_of_stat_indicator]; // return the char representing process state
+    }
+}
+namespace {
+    // finding section load bias for a given file address
+    std::int64_t get_section_load_bias(std::filesystem::path path, Elf64_Addr file_address)
+    {
+        auto command = std::string("readelf -WS ") + path.string();
+        auto pipe = popen(command.c_str(), "r"); // open a pipe so we can read this command's output
+        // regex that captures file addr, file offset, and size of the section
+        std::regex text_regex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+\(\w+))");
+        char* line = nullptr;
+        std::size_t len = 0;
+        while(getline(&line, &len, pipe) != -1) {
+            std::cmatch groups;
+            if(std::regex_search(line, groups, text_regex)) { //match regex to our line, and if it matches, we parse the corresponding data
+                auto address = std::stol(groups[1], nullptr, 16);
+                auto offset = std::stol(groups[2], nullptr, 16);
+                auto size = std::stol(groups[3], nullptr, 16);
+                if(address <= file_address and file_address < (address + size)) { // if file address is in between section address - section address + section size
+                    free(line);
+                    pclose(pipe);
+                    return address - offset; // return section load bias
+                }
+            }
+            free(line);
+            line = nullptr;
+        }
+        pclose(pipe);
+        adb::error::send("Could not find section load bias");
     }
 }
 
