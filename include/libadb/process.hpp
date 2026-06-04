@@ -60,11 +60,19 @@ namespace adb {
                     get_registers().read_by_id_as<std::uint64_t>(register_id::rip)
                 };
             }
+            // setting the program counter
+            void set_pc(virt_addr address)
+            {
+                get_registers().write_by_id(register_id::rip, address.addr());
+            }
             // breakpoint_site stuff
             breakpoint_site& create_breakpoint_site(virt_addr address);
             // to return our breakpoint sites. Const overload to maintain const correctness.
             stopPoint_collection<breakpoint_site>& breakpoint_sites() { return breakpoint_sites_; }
             const stopPoint_collection<breakpoint_site>& breakpoint_sites() const { return breakpoint_sites_; }
+
+            // support for stepping over machine instructions
+            adb::stop_reason step_instruction();
 
         private:
             pid_t pid_ = 0;

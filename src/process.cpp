@@ -99,6 +99,20 @@ adb::process::~process() {
 }
 
 void adb::process::resume() {
+    auto pc = get_pc();
+    if(breakpoint_sites_.enabled_stopPoint_at_address(pc)) { // check if we're at an enabled breakpoint before resuming
+        auto& bp = breakpoint_sites_.get_by_address(pc);
+        bp.disable();
+
+        if(ptrace(PTRACE_SINGLESTEP, pid_, nullptr, nullptr) < 0) { // disable breakpoint then execute a single instruction
+            error::send_errno("Failed to single step");
+        }
+        int wait_status;
+        if(waitpid(pid_, &wait_status, 0) < 0) { // wait until inferior has executed instrction and halted
+            error::send_errno("waitpid failed");
+        }
+        bp.enable(); // enable breakpoint again
+    }
     if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
         error::send_errno("Could not resume");
     }
@@ -116,6 +130,10 @@ adb::stop_reason adb::process::wait_on_signal() {
 
     if(is_attatched and state_ == process_state::stopped) {
         read_all_registers();
+        // after stopping at a SIGTRAP, if the address 1 byte below the PC is an enabled breakpoint, then point at that breakpoint
+        auto instr_begin = get_pc() - 1;
+        if(reason.info == SIGTRAP and breakpoint_sites_.enabled_stopPoint_at_address(instr_begin))
+            set_pc(instr_begin);
     }
 
     return reason;
@@ -182,4 +200,26 @@ adb::breakpoint_site& adb::process::create_breakpoint_site(virt_addr address) {
         error::send("Breakpoint site already created at address " + std::to_string(address.addr()));
     }
     return breakpoint_sites_.push(std::unique_ptr<breakpoint_site>(new breakpoint_site(*this, address)));
+}
+
+adb::stop_reason adb::process::step_instruction() {
+    std::optional<breakpoint_site*> to_reEnable; //track the breakpoint at which the process is currently stopped (if there is one)
+    auto pc = get_pc();
+    if(breakpoint_sites_.enabled_stopPoint_at_address(pc))
+    {
+        auto& bp = breakpoint_sites_.get_by_address(pc); // declare as a ref so we can store a pointer to it in a variable declared in the enclosing scope
+        bp.disable();
+        to_reEnable = &bp;
+    }
+
+    if(ptrace(PTRACE_SINGLESTEP, pid_, nullptr, nullptr) < 0)
+    {
+        error::send_errno("Could not single step");
+    }
+    auto reason = wait_on_signal(); // after stepping over instruction, wait until the next instruction is completed then retrieve stop reason
+
+    if(to_reEnable) {
+        to_reEnable.value()->enable();
+    }
+    return reason;
 }
