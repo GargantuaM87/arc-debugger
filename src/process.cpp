@@ -217,7 +217,7 @@ adb::stop_reason adb::process::step_instruction() {
         error::send_errno("Could not single step");
     }
     auto reason = wait_on_signal(); // after stepping over instruction, wait until the next instruction is completed then retrieve stop reason
-
+    // enable the breakpoint again
     if(to_reEnable) {
         to_reEnable.value()->enable();
     }

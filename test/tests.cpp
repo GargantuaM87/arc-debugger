@@ -40,7 +40,7 @@ namespace {
         auto command = std::string("readelf -WS ") + path.string();
         auto pipe = popen(command.c_str(), "r"); // open a pipe so we can read this command's output
         // regex that captures file addr, file offset, and size of the section
-        std::regex text_regex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+\(\w+))");
+        std::regex text_regex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+(\w+))");
         char* line = nullptr;
         std::size_t len = 0;
         while(getline(&line, &len, pipe) != -1) {
@@ -60,6 +60,36 @@ namespace {
         }
         pclose(pipe);
         adb::error::send("Could not find section load bias");
+    }
+    // retrieve the entry point file address of the binary
+    std::int64_t get_entry_point_offset(std::filesystem::path path) {
+        std::ifstream elf_file(path);
+
+        Elf64_Ehdr header; // defines binary format for the ELF header and gives metadata about the object file, such as its entry point
+        elf_file.read(reinterpret_cast<char*>(&header), sizeof(header)); //read the data from the beginning of the obj file into header
+
+        auto entry_file_address = header.e_entry; // "e_entry" gives entry point file address for the object file
+        auto load_bias = get_section_load_bias(path, entry_file_address);
+        return entry_file_address - load_bias; // calculate entry point file offset
+    }
+    // calculate load address of file offset in current process
+    virt_addr get_load_address(pid_t pid, std::int64_t offset)
+    {
+        std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
+        std::regex map_regex (R"((\w+)-\w+ ..(.). (\w+))"); //extracts low address range, executable flag, and file offset
+
+        std::string data;
+        while(std::getline(maps, data)) {
+            std::smatch groups;
+            std::regex_search(data, groups, map_regex);
+
+            if(groups[2] == 'x') { // match with the line that is marked as executable
+                auto low_range = std::stol(groups[1], nullptr, 16);
+                auto file_offset = std::stol(groups[3], nullptr, 16);
+                return virt_addr(offset - file_offset + low_range);
+            }
+        }
+        adb::error::send("Could not find load address");
     }
 }
 
@@ -289,4 +319,32 @@ TEST_CASE("Can iterate breakpoint sites", "[breakpoint]") {
     cproc->breakpoint_sites().for_each([addr = 42](auto& site) mutable {
         REQUIRE(site.address().addr() == addr++);
     });
+}
+
+TEST_CASE("Breakpoint on address works", "[breakpoint]") {
+    bool close_on_exec = false;
+    adb::pipe channel(close_on_exec);
+
+    auto proc = process::launch("./test/targets/hello", true, channel.get_write());
+    channel.close_write();
+
+    auto offset = get_entry_point_offset("./test/targets/hello");
+    auto load_address = get_load_address(proc->pid(), offset);
+
+    proc->create_breakpoint_site(load_address).enable();
+    proc->resume();
+    auto reason = proc->wait_on_signal();
+
+    REQUIRE(reason.reason == process_state::stopped);
+    REQUIRE(reason.info == SIGTRAP);
+    REQUIRE(proc->get_pc() == load_address);
+
+    proc->resume();
+    reason = proc->wait_on_signal();
+
+    REQUIRE(reason.reason == process_state::exited);
+    REQUIRE(reason.info == 0);
+
+    auto data = channel.read();
+    REQUIRE(to_string_view(data) == "Hello, adb!\n");
 }
