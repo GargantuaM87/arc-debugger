@@ -72,7 +72,10 @@ namespace adb {
             const stopPoint_collection<breakpoint_site>& breakpoint_sites() const { return breakpoint_sites_; }
 
             // support for stepping over machine instructions
-            adb::stop_reason step_instruction();
+            adb::stop_reason step_instruction();\
+
+            // memory operations
+
 
         private:
             pid_t pid_ = 0;
