@@ -1,6 +1,7 @@
 #include "../include/libadb/process.hpp"
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/pipe.hpp"
+#include "../include/libadb/bit.hpp"
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/personality.h>
+#include <sys/uio.h>
 
 namespace {
     void exit_with_perror(adb::pipe& channel, std::string const& prefix) {
@@ -222,4 +224,42 @@ adb::stop_reason adb::process::step_instruction() {
         to_reEnable.value()->enable();
     }
     return reason;
+}
+
+std::vector<std::byte> adb::process::read_memory(virt_addr address, std::size_t amount) const {
+    std::vector<std::byte> ret(amount); // initialize vector to fit the data we'll need
+
+    iovec local_desc{ ret.data(), ret.size() }; // a type that wraps a pointer to a buffer and the size of a buffer (data and size of the ret vector)
+    std::vector<iovec> remote_descs; // vector of descriptors to split range of data to be copied on memory page boundaries
+    while(amount > 0)
+    {
+        auto next_page = 0x1000 - (address.addr() & 0xfff);
+        auto chunk_size = std::min(amount, next_page);
+        remote_descs.push_back({ reinterpret_cast<void*>(address.addr()), chunk_size});
+        amount -= chunk_size;
+        address += chunk_size;
+    }
+
+    if(process_vm_readv(pid_, &local_desc, /*__liovcnt=*/1, remote_descs.data(), /*__riovcnt=*/remote_descs.size(), 0) < 0) {
+        error::send_errno("Could not read process memory space");
+    }
+    return ret;
+}
+// read 8 bytes from desired address, copy data over the start of those bytes, then write them back
+void adb::process::write_memory(virt_addr address, span<const std::byte> data)
+{
+    std::size_t written = 0;
+    while(written < data.size()) {
+        auto remaining = data.size() - written;
+        std::uint64_t word;
+
+        if(remaining >= 8) {
+            word = from_bytes<std::uint64_t>(data.begin() + written);
+        }
+        else {
+            auto read = read_memory(address + written, 8);
+            auto word_data = reinterpret_cast<char*>(&word);
+            std::memcpy(word_data, data.begin() + written, remaining);
+        }
+    }
 }
