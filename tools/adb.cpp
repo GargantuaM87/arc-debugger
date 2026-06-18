@@ -259,7 +259,7 @@ namespace {
         }
     }
 
-    void handle_memory_read_command(adb::process& process, const std::vector<std::string> args) {
+    void handle_memory_read_command(adb::process& process, const std::vector<std::string>& args) {
         auto address = adb::to_integral<std::uint64_t>(args[2], 16);
 
         if(!address) adb::error::send("Invalid address format");
@@ -271,6 +271,16 @@ namespace {
         }
 
         auto data = process.read_memory(adb::virt_addr{ *address }, n_bytes);
+        // loop over data 16 bytes at a time and compute start and end ranges
+        for(std::size_t i = 0; i < data.size(); i += 16) { // make sure i is divisible by 16
+            auto start = data.begin() + i;
+            auto end = data.begin() + std::min(i + 16, data.size());
+            fmt::print("{:#016x}: {:02x}\n", *address + i, fmt::join(start, end, " "));
+        }
+
+    }
+
+    void handle_memory_write_command(adb::process& process, std::vector<std::string>& args) {
 
     }
 

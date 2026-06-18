@@ -7,6 +7,7 @@
 #include <string_view>
 #include <array>
 #include <cstddef>
+#include <vector>
 #include "./error.hpp"
 
 namespace adb {
@@ -69,6 +70,31 @@ namespace adb {
             invalid();
         if(c != text.end())
             invalid();
+        return bytes;
+    }
+    inline auto parse_vector(std::string_view text) {
+        auto invalid = [] { adb::error::send("Invalid format"); };
+
+        std::vector<std::byte> bytes;
+        const char* c = text.data();
+
+        if(*c++ != '[')
+            invalid();
+
+        while(*c != ']')
+        {
+            auto byte = adb::to_integral<std::byte>({c, 4}, 16);
+            bytes.push_back(byte.value());
+            c += 4;
+
+            if(*c == ',')
+                ++c;
+            else if(*c != ']')
+                invalid();
+        }
+        if(++c != text.end())
+            invalid();
+
         return bytes;
     }
 }
