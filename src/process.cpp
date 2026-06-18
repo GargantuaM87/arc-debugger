@@ -249,17 +249,22 @@ std::vector<std::byte> adb::process::read_memory(virt_addr address, std::size_t 
 void adb::process::write_memory(virt_addr address, span<const std::byte> data)
 {
     std::size_t written = 0;
-    while(written < data.size()) {
+    while(written < data.size()) { // loop until we write all the data that the caller gives
         auto remaining = data.size() - written;
         std::uint64_t word;
 
-        if(remaining >= 8) {
+        if(remaining >= 8) { // if at least 8 bytes remain, write the next 8 bytes from the start of the given buffer
             word = from_bytes<std::uint64_t>(data.begin() + written);
         }
-        else {
+        else {  // special case of doing a partial memory write
             auto read = read_memory(address + written, 8);
             auto word_data = reinterpret_cast<char*>(&word);
             std::memcpy(word_data, data.begin() + written, remaining);
+            std::memcpy(word_data + remaining, read.data() + remaining, 8 - remaining);
         }
+        if(ptrace(PTRACE_POKEDATA, pid_, address + written, word) < 0) {
+            error::send_errno("Failed to write memory");
+        }
+        written += 8;
     }
 }

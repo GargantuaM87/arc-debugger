@@ -13,6 +13,7 @@
 #include "./types.hpp"
 #include "./breakpoint_site.hpp"
 #include "./stopPoint_collection.hpp"
+#include "./bit.hpp"
 
 namespace adb {
     enum class process_state {
@@ -77,6 +78,12 @@ namespace adb {
             // memory operations
             std::vector<std::byte> read_memory(virt_addr address, std::size_t amount) const;
             void write_memory(virt_addr address, span<const std::byte> data); // make sure we can't accidentally modify the data to which span points to
+
+            template <class T>
+            T read_memory_as(virt_addr address) const {
+                auto data = read_memory(address, sizeof(T)); // reads amount of memory equal to the size of the type
+                return from_bytes<T>(data.data());
+            }
 
 
         private:
