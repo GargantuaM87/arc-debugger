@@ -280,8 +280,18 @@ namespace {
 
     }
 
-    void handle_memory_write_command(adb::process& process, std::vector<std::string>& args) {
+    void handle_memory_write_command(adb::process& process, const std::vector<std::string>& args) {
+        if(args.size() != 4) {
+            print_help({ "help", "memory"});
+            return;
+        }
 
+        auto address = adb::to_integral<std::uint64_t>(args[2], 16);
+        if (!address)
+            adb::error::send("Invalid address format");
+
+        auto data = adb::parse_vector(args[3]);
+        process.write_memory(adb::virt_addr{*address}, {data.data(), data.size()});
     }
 
     void handle_memory_command(adb::process& process, const std::vector<std::string>& args)
