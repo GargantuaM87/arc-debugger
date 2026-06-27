@@ -62,9 +62,7 @@ adb::registers::value adb::registers::read(const register_info& info) const {
         return from_bytes<byte128>(bytes + info.offset);
     }
 }
-/**
- * 1. Get raw bytes of data as a pointer
- */
+
 void adb::registers::write(const register_info& info, value val) {
     auto bytes = as_bytes(data_);
     // takes a function and a variant

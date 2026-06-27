@@ -63,7 +63,7 @@ namespace {
             message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
             break;
        case adb::process_state::stopped:
-            message = fmt::format("stopped with signal {} at {:#}", sigabbrev_np(reason.info), process.get_pc().addr());
+            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), process.get_pc().addr());
             break;
        }
        fmt::print("Process {} {}\n", process.pid(), message);
@@ -103,6 +103,7 @@ namespace {
             std::cerr << R"(Available commands:
     breakpoint  - Commands for operating on breakpoints
     continue    - Resume the process
+    memory      - Commands for operating on memory
     register    - Commands for operating on registers
     step        - Step over a single instruction
             )";
@@ -123,6 +124,13 @@ namespace {
                 disable <id>
                 enable <id>
                 set <address>
+            )";
+        }
+        else if(is_prefix(args[1], "memory")) {
+            std::cerr << R"(Available commands:
+                read <address>
+                read <address> <number of bytes>
+                write <address> <bytes>
             )";
         }
         else {

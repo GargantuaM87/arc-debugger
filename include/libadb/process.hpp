@@ -33,6 +33,9 @@ namespace adb {
     class process {
         public:
             ~process();
+            /**
+             * Launches a process through the given file path.
+             */
             static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true,
                 std::optional<int> stdout_replacement = std::nullopt); // Launches process based on path
             static std::unique_ptr<process> attatch(pid_t pid); // Attatches to process based on PID

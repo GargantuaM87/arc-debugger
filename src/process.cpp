@@ -24,7 +24,7 @@ namespace {
 }
 // We can launch a process with options to debug it or not
 std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, bool debug, std::optional<int> stdout_replacement) {
-    pipe channel(true); // close_on_exec = ture
+    pipe channel(true); // close_on_exec = true
     pid_t pid;
     if((pid = fork()) < 0) {
         // Error: Fork failed
