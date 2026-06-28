@@ -92,7 +92,7 @@ namespace {
         adb::error::send("Could not find load address");
     }
 }
-
+// -----------TESTS-----------
 TEST_CASE("process::launch success", "[process]") {
     auto proc = process::launch("yes");
     REQUIRE(process_exists(proc->pid()));
@@ -359,4 +359,32 @@ TEST_CASE("Can remove breakpoint sites", "[breakpoint]")
     proc->breakpoint_sites().remove_by_id(site.id());
     proc->breakpoint_sites().remove_by_address(virt_addr{43});
     REQUIRE(proc->breakpoint_sites().empty());
+}
+
+TEST_CASE("Reading and writing memory works", "[memory]")
+{
+    bool close_on_exec = false;
+    adb::pipe channel(close_on_exec);
+    auto proc = adb::process::launch("./test/targets/memory", true, channel.get_write());
+    channel.close_write();
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto a_pointer = from_bytes<std::uint64_t>(channel.read().data());
+    auto data_vec = proc->read_memory(virt_addr { a_pointer }, 8);
+    auto data = from_bytes<std::uint64_t>(data_vec.data());
+    REQUIRE(data == 0xcafecafe);
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto b_pointer = from_bytes<uint64_t>(channel.read().data());
+    proc->write_memory(virt_addr{b_pointer}, {as_bytes("Hello, adb!"), 12});
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto read = channel.read();
+    REQUIRE(to_string_view(read) == "Hello, adb!");
 }

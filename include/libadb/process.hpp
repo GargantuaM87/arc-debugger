@@ -34,10 +34,13 @@ namespace adb {
         public:
             ~process();
             /**
-             * Launches a process through the given file path.
+             * Launches a process through the given file path. By default, the process launched it to be debugged and it will
+             * not have its stdout replaced.
              */
-            static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true,
-                std::optional<int> stdout_replacement = std::nullopt); // Launches process based on path
+            static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true, std::optional<int> stdout_replacement = std::nullopt);
+            /**
+             *
+             */
             static std::unique_ptr<process> attatch(pid_t pid); // Attatches to process based on PID
 
             void resume();
