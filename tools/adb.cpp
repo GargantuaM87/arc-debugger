@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -16,12 +17,15 @@
 #include "../include/libadb/process.hpp"
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/parse.hpp"
+#include "../include/libadb/disassembler.hpp"
 
 // Anonymous namespace so we can reuse the same names in different files
 namespace {
-    /*
-     * Attatch to a process.
-     */
+    void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions);
+    void handle_stop(adb::process& process, adb::stop_reason reason);
+}
+namespace {
+
     std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
         // Passing PID
         if(argc == 3 && argv[1] == std::string_view("-p")) { // comparing string contents instead of memory contents
@@ -320,6 +324,12 @@ namespace {
         }
     }
 
+    void handle_disassemble_command(adb::process& process, const std::vector<std::string>& args)
+    {
+        auto address = process.get_pc();
+        std::size_t n_instructions = 5;
+    }
+
     void handle_command(std::unique_ptr<adb::process>& process, std::string_view line) {
         auto args = split(line, ' ');
         auto command = args[0];
@@ -327,7 +337,7 @@ namespace {
         if(is_prefix(command, "continue")) {
             process->resume();
             auto reason = process->wait_on_signal();
-            print_stop_reason(*process, reason);
+            handle_stop(*process, reason);
         }
         else if(is_prefix(command, "help")) {
             print_help(args);
@@ -340,16 +350,42 @@ namespace {
         }
         else if(is_prefix(command, "step")) {
             auto reason = process->step_instruction();
-            print_stop_reason(*process, reason);
+            handle_stop(*process, reason);
         }
         else if(is_prefix(command, "memory")) {
             handle_memory_command(*process, args);
+        }
+        else if(is_prefix(command, "disassemble")) {
+            handle_disassemble_command(*process, args);
         }
         else {
             std::cerr << "Unknown command" << std::endl;
         }
     }
 }
+
+namespace {
+    void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions) {
+        adb::disassembler disasm(process);
+        auto instructions = disasm.disassemble(n_instructions, address);
+        for(auto& instr : instructions) {
+            // :#018x specifier prints a hexadecimal representation of the address with enough padding to stay vertically aligned
+            fmt::print("{:#018x}: {}\n", instr.address.addr(), instr.text);
+        }
+}
+
+}
+namespace {
+    void handle_stop(adb::process &process, adb::stop_reason reason) {
+            print_stop_reason(process, reason);
+            // if process stopped due to a signal
+            if(reason.reason == adb::process_state::stopped)
+            {
+                print_disassembly(process, process.get_pc(), 5); // print 5 lines of disassembly starting from program counter
+            }
+        }
+}
+
 namespace {
     void main_loop(std::unique_ptr<adb::process>& process) {
         char* line = nullptr;

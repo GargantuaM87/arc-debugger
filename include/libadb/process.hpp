@@ -39,24 +39,31 @@ namespace adb {
              */
             static std::unique_ptr<process> launch(std::filesystem::path path, bool debug = true, std::optional<int> stdout_replacement = std::nullopt);
             /**
-             *
+             * Attatch this debugger to a current active process through its PID.
              */
             static std::unique_ptr<process> attatch(pid_t pid); // Attatches to process based on PID
-
+            /*
+             * Change a process's state to running.
+             */
             void resume();
+            /*
+             * Make a process stop until it recieves a signal.
+             */
             stop_reason wait_on_signal();
-            // Getters
+            // Return process ID.
             pid_t pid() const { return pid_; }
+            // Return process activity state.
             process_state state() const { return state_; }
             // Deleting constructor and copy operations
             process() = delete;
             process(const process&) = delete;
             process& operator=(const process&) = delete;
 
-            // Register functions
+            // Return process registers.
             registers& get_registers() { return *registers_; }
+            // Return process registers.
             const registers& get_registers() const { return *registers_; }
-
+            // Write to debug registers or a general purpose register.
             void write_user_area(std::size_t offset, std::uint64_t data);
 
             void write_fprs(const user_fpregs_struct& fprs);
