@@ -32,6 +32,8 @@ namespace adb {
 
             std::size_t size() const {return stopPoints_.size();}
             bool empty() const {return stopPoints_.empty();}
+
+            std::vector<StopPoint*> get_in_region(virt_addr low, virt_addr high) const;
         private:
             using points_t = std::vector<std::unique_ptr<StopPoint>>;
 
@@ -155,6 +157,19 @@ namespace adb {
         for(const auto& point : stopPoints_) {
             f(*point);
         }
+    }
+}
+
+namespace adb {
+    template <class StopPoint>
+    std::vector<StopPoint*> stopPoint_collection<StopPoint>::get_in_region(virt_addr low, virt_addr high) const {
+        std::vector<StopPoint*> ret;
+        for(auto& site : stopPoints_) { // whichever site falls within the given range, we include within the vector
+            if(site->in_range(low, high)) {
+                ret.push_back(&*site);
+            }
+        }
+        return ret;
     }
 }
 #endif

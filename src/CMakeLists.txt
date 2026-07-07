@@ -1,6 +1,6 @@
-add_library(libadb process.cpp pipe.cpp registers.cpp breakpoint_site.cpp)
+add_library(libadb process.cpp pipe.cpp registers.cpp breakpoint_site.cpp
+disassembler.cpp)
 add_library(adb::libadb ALIAS libadb)
-add_library(libadb ... disassembler.cpp)
 target_link_libraries(libadb PRIVATE Zydis::Zydis)
 
 set_target_properties(

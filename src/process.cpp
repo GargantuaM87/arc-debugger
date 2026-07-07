@@ -3,6 +3,7 @@
 #include "../include/libadb/pipe.hpp"
 #include "../include/libadb/bit.hpp"
 #include <csignal>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -267,4 +268,17 @@ void adb::process::write_memory(virt_addr address, span<const std::byte> data)
         }
         written += 8;
     }
+}
+
+std::vector<std::byte> adb::process::read_memory_without_traps(adb::virt_addr address, std::size_t amount) const {
+    auto memory = read_memory(address, amount);
+    auto sites = breakpoint_sites_.get_in_region(address, address + amount);
+    // for each enabled breakpoint
+    // replace int3 instruction with the memory addresses's original data
+    for (auto site : sites) {
+        if(!site->is_enabled()) continue;
+        auto offset = site->address() - address.addr();
+        memory[offset.addr()] = site->saved_data_;
+    }
+    return memory;
 }

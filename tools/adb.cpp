@@ -107,6 +107,7 @@ namespace {
             std::cerr << R"(Available commands:
     breakpoint  - Commands for operating on breakpoints
     continue    - Resume the process
+    disassemble - Disassemble machine code to assembly
     memory      - Commands for operating on memory
     register    - Commands for operating on registers
     step        - Step over a single instruction
@@ -135,6 +136,12 @@ namespace {
                 read <address>
                 read <address> <number of bytes>
                 write <address> <bytes>
+            )";
+        }
+        else if(is_prefix(args[1], "disassemble")) {
+            std::cerr << R"(Available options:
+                -c <number of instructions>
+                -a <start address>
             )";
         }
         else {
@@ -323,11 +330,36 @@ namespace {
             print_help({"help", "memory"});
         }
     }
-
+    // disassemble -c <n_instructions>
+    // disassemble -a <address>
     void handle_disassemble_command(adb::process& process, const std::vector<std::string>& args)
     {
         auto address = process.get_pc();
-        std::size_t n_instructions = 5;
+        std::size_t n_instructions = 5; // set this to five instructions by default
+
+        auto it = args.begin() + 1;
+        // looping over to see which argument the user sent us
+        while(it != args.end()) {
+            if(*it == "-a" and it + 1 != args.end()) {
+                ++it;
+                auto opt_addr = adb::to_integral<std::uint64_t>(*it++, 16);
+                if(!opt_addr)
+                    adb::error::send("Invalid address format");
+                address = adb::virt_addr{*opt_addr};
+            }
+            else if(*it == "-c" and it + 1 != args.end()) {
+                ++it;
+                auto opt_n = adb::to_integral<std::size_t>(*it++);
+                if(!opt_n)
+                    adb::error::send("Invalid instruction count");
+                n_instructions = *opt_n;
+            }
+            else {
+                print_help( {"help", "disassemble"} );
+                return;
+            }
+        }
+        print_disassembly(process, address, n_instructions);
     }
 
     void handle_command(std::unique_ptr<adb::process>& process, std::string_view line) {

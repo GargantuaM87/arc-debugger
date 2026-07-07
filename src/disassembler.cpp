@@ -14,7 +14,7 @@ std::vector<adb::disassembler::instruction> adb::disassembler::disassemble(std::
         address.emplace(process_->get_pc()); // constructs a new object within std::optional (in this case, the program counter)
     }
     // largest x64 instruction is 15 bytes
-    auto code = process_->read_memory(*address, n_instructions * 15);
+    auto code = process_->read_memory_without_traps(*address, n_instructions * 15);
 
     ZyanUSize offset = 0;
     ZydisDisassembledInstruction instr;
