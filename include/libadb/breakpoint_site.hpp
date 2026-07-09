@@ -37,15 +37,23 @@ namespace adb {
             bool in_range(virt_addr low, virt_addr high) const {
                 return low <= address_ and high > address_;
             }
+            // Check if this is a hardware breakpoint or not.
+            bool is_hardware() const { return is_hardware_; }
+            // Check if this breakpoint is for internal usage.
+            bool is_internal() const { return is_internal_; }
         private:
-            breakpoint_site(process&, virt_addr address);
+            breakpoint_site(process&, virt_addr address,
+                bool is_hardware = false, bool is_internal = false);
             friend process;
 
             id_type id_;
             process* process_;
             virt_addr address_;
-            bool is_enabled_;
             std::byte saved_data_;
+            bool is_enabled_;
+            bool is_hardware_;
+            bool is_internal_;
+            int hardware_register_index_ = -1;
     };
 }
 

@@ -198,11 +198,11 @@ void adb::process::write_gprs(const user_regs_struct& gprs) {
     }
 }
 
-adb::breakpoint_site& adb::process::create_breakpoint_site(virt_addr address) {
+adb::breakpoint_site& adb::process::create_breakpoint_site(virt_addr address, bool is_hardware, bool is_internal) {
     if(breakpoint_sites_.contains_address(address)) {
         error::send("Breakpoint site already created at address " + std::to_string(address.addr()));
     }
-    return breakpoint_sites_.push(std::unique_ptr<breakpoint_site>(new breakpoint_site(*this, address)));
+    return breakpoint_sites_.push(std::unique_ptr<breakpoint_site>(new breakpoint_site(*this, address, is_hardware, is_internal)));
 }
 
 adb::stop_reason adb::process::step_instruction() {
@@ -276,7 +276,7 @@ std::vector<std::byte> adb::process::read_memory_without_traps(adb::virt_addr ad
     // for each enabled breakpoint
     // replace int3 instruction with the memory addresses's original data
     for (auto site : sites) {
-        if(!site->is_enabled()) continue;
+        if(!site->is_enabled() or site->is_hardware()) continue;
         auto offset = site->address() - address.addr();
         memory[offset.addr()] = site->saved_data_;
     }

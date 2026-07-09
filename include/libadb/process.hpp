@@ -81,10 +81,10 @@ namespace adb {
                 get_registers().write_by_id(register_id::rip, address.addr());
             }
             /*
-             * Create a breakpoint site at the given address.
-             * Only one breakpoint site may exist at the same address.
+             * Create a breakpoint site at the given address. Only one breakpoint site may exist at the same address. By default, the
+             * breakpoint created will be a software breakpoint and will not be internally used by the debugger.
              */
-            breakpoint_site& create_breakpoint_site(virt_addr address);
+            breakpoint_site& create_breakpoint_site(virt_addr address, bool hardware = false, bool internal = false);
             // Return collection of breakpoint sites.
             stopPoint_collection<breakpoint_site>& breakpoint_sites() { return breakpoint_sites_; }
             // Return collection of breakpoint sites. A const overload to maintain const correctness.

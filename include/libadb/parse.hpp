@@ -11,10 +11,11 @@
 #include "./error.hpp"
 
 namespace adb {
+    // Represent a string_view object as an integer object with a given base.
     template <class I>
     std::optional<I> to_integral(std::string_view sv, int base = 10) { // return optional<I> which reprents either I or nothing
         auto begin = sv.begin();
-        // if the base if 16 (hexadecimal) then we want to allow '0x' and parse after that
+        // if the base is 16 (hexadecimal) then we want to allow '0x' and parse after that
         if(base == 16 and sv.size() > 1 and begin[0] == '0' and begin[1] == 'x') {
             begin += 2;
         }
@@ -27,7 +28,9 @@ namespace adb {
         }
         return ret;
     }
-
+    /*
+     * Represent the given string_view as an uint8_t with the given based then cast as a byte.
+     */
     template<>
     inline std::optional<std::byte> to_integral(std::string_view sv, int base) {
         auto uint8 = to_integral<std::uint8_t>(sv, base);
@@ -35,7 +38,7 @@ namespace adb {
             return static_cast<std::byte>(*uint8);
         return std::nullopt;
     }
-
+    // Parse a string_view to a float.
     template <class F>
     std::optional<F> to_float(std::string_view sv) {
         F ret;
@@ -46,7 +49,7 @@ namespace adb {
         }
         return ret;
     }
-
+    //
     template <std::size_t N>
     auto parse_vector(std::string_view text) {
         auto invalid = [] {adb::error::send("Invalid format") ;};
