@@ -113,6 +113,10 @@ namespace adb {
                 auto data = read_memory(address, sizeof(T)); // reads amount of memory equal to the size of the type
                 return from_bytes<T>(data.data());
             }
+            // Find and enable an available hardware breakpoint.
+            int set_hardware_breakpoint(breakpoint_site::id_type id, virt_addr address);
+            // Disable a hardware breakpoint through its index.
+            void clear_hardware_stoppoint(int index);
 
 
         private:
@@ -127,6 +131,8 @@ namespace adb {
                                                                            is_attatched(is_attatched), registers_(new registers(*this)) { }
             // Used to periodically update registers.
             void read_all_registers(); // populate registers when the process halts
+
+            int set_hardware_stoppoint(virt_addr address, adb::stopPoint_mode mode, std::size_t size);
     };
 }
 

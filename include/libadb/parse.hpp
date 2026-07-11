@@ -49,7 +49,7 @@ namespace adb {
         }
         return ret;
     }
-    //
+    // Parse a group of strings (grouped into brackets) into an array of N bytes.
     template <std::size_t N>
     auto parse_vector(std::string_view text) {
         auto invalid = [] {adb::error::send("Invalid format") ;};

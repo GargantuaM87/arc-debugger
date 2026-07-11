@@ -23,6 +23,36 @@ namespace {
         exit(-1);
     }
 }
+
+namespace {
+    std::uint64_t encode_hardware_stoppoint_mode(adb::stopPoint_mode mode) {
+        switch(mode) {
+            case adb::stopPoint_mode::write: return 0b01;
+            case adb::stopPoint_mode::read_write: return 0b11;
+            case adb::stopPoint_mode::execute: return 0b00;
+            default: adb::error::send("Invalid stop point mode");
+        }
+    }
+
+    std::uint64_t encode_hardware_stoppoint_size(std::size_t size) {
+        switch(size) { // return bits that correspond to debug register size (in bytes)
+            case 1: return 0b00;
+            case 2: return 0b01;
+            case 4: return 0b11;
+            case 8: return 0b10;
+            default: adb::error::send("Invalid stop point size");
+        }
+    }
+
+    int find_free_stoppoint_register(std::uint64_t control_register) {
+        for(auto i = 0; i < 4; ++i) {
+            if((control_register & (0b11 << (i * 2))) == 0) {
+                return i;
+            }
+        }
+        adb::error::send("No hardware debug registers found");
+    }
+}
 // We can launch a process with options to debug it or not
 std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, bool debug, std::optional<int> stdout_replacement) {
     pipe channel(true); // close_on_exec = true
@@ -281,4 +311,46 @@ std::vector<std::byte> adb::process::read_memory_without_traps(adb::virt_addr ad
         memory[offset.addr()] = site->saved_data_;
     }
     return memory;
+}
+
+int adb::process::set_hardware_breakpoint(breakpoint_site::id_type id, virt_addr address) {
+    return set_hardware_stoppoint(address, stopPoint_mode::execute, 1);
+}
+
+int adb::process::set_hardware_stoppoint(adb::virt_addr address, stopPoint_mode mode, std::size_t size) {
+    auto& regs = get_registers();
+    auto controlReg = regs.read_by_id_as<std::uint64_t>(register_id::dr7);
+
+    int free_space = find_free_stoppoint_register(controlReg); // return 0, 1, 2, or 3 depending on which dr is free
+
+    auto id = static_cast<int>(register_id::dr0) + free_space; // basically getting the id of the free dr
+    regs.write_by_id(static_cast<register_id>(id), address.addr()); // write to the dr the virtual address that is given
+
+    auto mode_flag = encode_hardware_stoppoint_mode(mode);
+    auto size_flag = encode_hardware_stoppoint_size(size);
+
+    auto enable_bits = (1 << (free_space * 2));
+    auto mode_bits = (mode_flag << (free_space * 4 + 16));
+    auto size_bits = (size_flag << (free_space * 4 + 18));
+
+    auto clear_mask = (0b11 << (free_space * 2)) | (0b1111 << (free_space * 4 + 16));
+
+    auto masked = controlReg & ~clear_mask;
+    masked |= enable_bits | mode_bits | size_bits;
+
+    regs.write_by_id(register_id::dr7, masked);
+
+    return free_space;
+}
+
+void adb::process::clear_hardware_stoppoint(int index) {
+    auto id = static_cast<int>(register_id::dr0) + index;
+    get_registers().write_by_id(static_cast<register_id>(id), 0);
+
+    auto control = get_registers().read_by_id_as<std::uint64_t>(register_id::dr7);
+
+    auto clear_mask = (0b11 << (index * 2)) | (0b1111 << (index * 4 + 16));
+    auto masked = control & ~clear_mask;
+
+    get_registers().write_by_id(register_id::dr7, masked);
 }
