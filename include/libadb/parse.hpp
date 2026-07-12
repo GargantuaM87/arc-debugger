@@ -75,6 +75,7 @@ namespace adb {
             invalid();
         return bytes;
     }
+    // Parse a group of strings (grouped into brackets) into a vector of bytes.
     inline auto parse_vector(std::string_view text) {
         auto invalid = [] { adb::error::send("Invalid format"); };
 
