@@ -12,9 +12,11 @@ namespace adb {
         public:
             explicit pipe(bool close_on_exec); //explicit keyword prevents implicit conversions from occuring (either with the constructor or pass by values)
             ~pipe();
-
+            // Return the read end of the pipe.
             int get_read() const  { return fds_[read_fd]; }
+            // Return the write end of the pipe.
             int get_write() const { return fds_[write_fd]; }
+            // Completely invalidate the read end of the pipe.
             int release_read();
             int release_write();
             void close_read();

@@ -388,3 +388,39 @@ TEST_CASE("Reading and writing memory works", "[memory]")
     auto read = channel.read();
     REQUIRE(to_string_view(read) == "Hello, adb!");
 }
+
+TEST_CASE("Hardware breakpoint evades memory checksums", "[breakpoint]") {
+    bool close_on_exec = false;
+    adb::pipe channel(close_on_exec);
+
+    auto proc = process::launch("./test/targets/anti_debugger", true, channel.get_write());
+    channel.close_write();
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    auto func = virt_addr(from_bytes<std::uint64_t>(channel.read().data()));
+    // create sofwtare breakpoint
+    auto& soft = proc->create_breakpoint_site(func);
+    soft.enable();
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    REQUIRE(to_string_view(channel.read()) == "Replacing AI with real developers...\n");
+
+    proc->breakpoint_sites().remove_by_id(soft.id());
+    // create hardware breakpoint
+    auto& hard = proc->create_breakpoint_site(func, true);
+    hard.enable();
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    REQUIRE(proc->get_pc() == func);
+
+    proc->resume();
+    proc->wait_on_signal();
+
+    REQUIRE(to_string_view(channel.read()) == "Replacing devs with AI...\n");
+}

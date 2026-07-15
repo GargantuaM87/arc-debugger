@@ -235,6 +235,13 @@ adb::breakpoint_site& adb::process::create_breakpoint_site(virt_addr address, bo
     return breakpoint_sites_.push(std::unique_ptr<breakpoint_site>(new breakpoint_site(*this, address, is_hardware, is_internal)));
 }
 
+adb::watchpoint& adb::process::create_watchpoint(adb::virt_addr address, stopPoint_mode mode, std::size_t size) {
+    if(watchpoints_.contains_address(address)) {
+        error::send("Watchpoint already created at address " + std::to_string(address.addr()));
+    }
+    return watchpoints_.push(std::unique_ptr<adb::watchpoint>(new watchpoint(*this, address, mode, size)));
+}
+
 adb::stop_reason adb::process::step_instruction() {
     std::optional<breakpoint_site*> to_reEnable; //track the breakpoint at which the process is currently stopped (if there is one)
     auto pc = get_pc();
@@ -353,4 +360,8 @@ void adb::process::clear_hardware_stoppoint(int index) {
     auto masked = control & ~clear_mask;
 
     get_registers().write_by_id(register_id::dr7, masked);
+}
+
+int adb::process::set_watchpoint(adb::watchpoint::id_type id, virt_addr address, stopPoint_mode mode, std::size_t size) {
+    return set_hardware_stoppoint(address, mode, size);
 }

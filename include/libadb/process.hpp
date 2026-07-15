@@ -14,6 +14,7 @@
 #include "./breakpoint_site.hpp"
 #include "./stopPoint_collection.hpp"
 #include "./bit.hpp"
+#include "./watchpoint.hpp"
 
 namespace adb {
     enum class process_state {
@@ -117,6 +118,16 @@ namespace adb {
             int set_hardware_breakpoint(breakpoint_site::id_type id, virt_addr address);
             // Disable a hardware breakpoint through its index.
             void clear_hardware_stoppoint(int index);
+            // Set a watchpoint with a given ID at a given address with the given mode and size.
+            int set_watchpoint(watchpoint::id_type id, virt_addr address, stopPoint_mode mode, std::size_t size);
+
+            watchpoint& create_watchpoint(virt_addr address, stopPoint_mode mode, std::size_t size);
+            stopPoint_collection<watchpoint>& watchpoints() {
+                return watchpoints_;
+            }
+            const stopPoint_collection<watchpoint>& watchpoints() const {
+                return watchpoints_;
+            }
 
 
         private:
@@ -126,6 +137,7 @@ namespace adb {
             bool is_attatched = true;
             std::unique_ptr<registers> registers_;
             stopPoint_collection<breakpoint_site> breakpoint_sites_;
+            stopPoint_collection<watchpoint> watchpoints_;
 
             process(pid_t pid, bool terminate_on_end, bool is_attatched) : pid_(pid), terminate_on_end_(terminate_on_end),
                                                                            is_attatched(is_attatched), registers_(new registers(*this)) { }
