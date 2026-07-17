@@ -18,8 +18,11 @@ namespace adb {
             int get_write() const { return fds_[write_fd]; }
             // Completely invalidate the read end of the pipe.
             int release_read();
+            // Completely invalidate the write end of the pipe.
             int release_write();
+            // Close the read end of the pipe.
             void close_read();
+            // Close the write end of the pipe.
             void close_write();
 
             std::vector<std::byte> read();

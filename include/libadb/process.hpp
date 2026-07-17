@@ -120,11 +120,12 @@ namespace adb {
             void clear_hardware_stoppoint(int index);
             // Set a watchpoint with a given ID at a given address with the given mode and size.
             int set_watchpoint(watchpoint::id_type id, virt_addr address, stopPoint_mode mode, std::size_t size);
-
+            //Create a unique watchpoint which is stored later.
             watchpoint& create_watchpoint(virt_addr address, stopPoint_mode mode, std::size_t size);
             stopPoint_collection<watchpoint>& watchpoints() {
                 return watchpoints_;
             }
+            //Create a unique watchpoint which is stored later.
             const stopPoint_collection<watchpoint>& watchpoints() const {
                 return watchpoints_;
             }

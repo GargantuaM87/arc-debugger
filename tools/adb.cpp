@@ -111,6 +111,7 @@ namespace {
     memory      - Commands for operating on memory
     register    - Commands for operating on registers
     step        - Step over a single instruction
+    watchpoint  - Commands for operating on watchpoints
             )";
         }
         else if(is_prefix(args[1], "register")) {
@@ -143,6 +144,15 @@ namespace {
             std::cerr << R"(Available options:
                 -c <number of instructions>
                 -a <start address>
+            )";
+        }
+        else if(is_prefix(args[1], "watchpoint")) {
+            std::cerr << R"(Available commands:
+                list
+                delete <id>
+                disable <id>
+                enable <id>
+                set <address> <w|rx|x> <size>
             )";
         }
         else {
@@ -373,6 +383,102 @@ namespace {
         print_disassembly(process, address, n_instructions);
     }
 
+    void handle_watchpoint_list(adb::process& process, const std::vector<std::string>& args) {
+        auto stopPoint_mode_to_string = [](auto mode) { // lambda to get string representation of diff stopPoint modes
+            switch(mode) {
+                case adb::stopPoint_mode::execute: return "execute";
+                case adb::stopPoint_mode::read_write: return "read_write";
+                case adb::stopPoint_mode::write: return "write";
+                default: adb::error::send("Invalid stop point mode");
+            }
+        };
+        if(process.watchpoints().empty()) {
+            fmt::print("No watchpoints set\n");
+        }
+        // print watchpoint details to user
+        else {
+            fmt::print("Current Watchpoints:\n");
+            process.watchpoints().for_each([&](auto& point){
+                fmt::print("{}: address = {:#x}, mode {}, size = {}, {}\n",
+                    point.id(), point.address().addr(), stopPoint_mode_to_string(point.mode()), point.size(),
+                    point.is_enabled ? "enabled" : "disabled");
+            });
+
+            }
+        }
+    }
+
+    void handle_watchpoint_set(adb::process& process, const std::vector<std::string>& args) {
+        if(args.size() != 5) {
+            print_help({"help", "watchpoint"});
+            return;
+        }
+        // getting the necessary information from comand line arguments
+        auto address = adb::to_integral<std::uint64_t>(args[2], 16);
+        auto mode_text = args[3];
+        auto size = adb::to_integral<std::size_t>(args[4]);
+
+        if(!address or !size or !(mode_text == "w" or mode_text == "rw" or mode_text == "x")) {
+            print_help( {"help", "watchpoint"} );
+            return;
+        }
+
+        adb::stopPoint_mode mode;
+        if(mode_text == "w")
+            mode = adb::stopPoint_mode::write;
+        else if(mode_text == "rw")
+            mode = adb::stopPoint_mode::read_write;
+        else if(mode_text == "x")
+            mode = adb::stopPoint_mode::execute;
+
+        process.create_watchpoint(adb::virt_addr{*address}, mode, *size).enable();
+    }
+
+    /*
+     * watchpoint list
+     * watchpoint set <address> <mode> <size>
+     * watchpoint enable <id>
+     * watchpoint disable <id>
+     * watchpoint delete <id>
+     */
+    void handle_watchpoint_command(adb::process& process, const std::vector<std::string>& args) {
+        if(args.size() < 2) {
+            print_help( {"help", "watchpoint"} );
+            return;
+        }
+
+        auto command = args[1];
+
+        if(is_prefix(command, "list")) {
+            handle_watchpoint_list(process, args);
+            return;
+        }
+        if(is_prefix(command, "set")) {
+           // handle_watchpoint_set(process, args);
+            return;
+        }
+        if(args.size() < 3) {
+            print_help( {"help", "watchpoint"} );
+            return;
+        }
+
+        auto id = adb::to_integral<adb::watchpoint::id_type>(args[2]);
+        if(!id) {
+            std::cerr << "Command expects watchpoint ID";
+            return;
+        }
+
+        if(is_prefix(command, "enable")) {
+            process.watchpoints().get_by_id(*id).enable();
+        }
+        else if(is_prefix(command, "disable")) {
+            process.watchpoints().get_by_id(*id).disable();
+        }
+        else if(is_prefix(command, "delete")) {
+            process.watchpoints().remove_by_id(*id);
+        }
+    }
+
     void handle_command(std::unique_ptr<adb::process>& process, std::string_view line) {
         auto args = split(line, ' ');
         auto command = args[0];
@@ -400,6 +506,9 @@ namespace {
         }
         else if(is_prefix(command, "disassemble")) {
             handle_disassemble_command(*process, args);
+        }
+        else if(is_prefix(command, "watchpoint")) {
+            handle_watchpoint_command(*process, args);
         }
         else {
             std::cerr << "Unknown command" << std::endl;
