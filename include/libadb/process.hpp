@@ -91,8 +91,8 @@ namespace adb {
             // Return collection of breakpoint sites. A const overload to maintain const correctness.
             const stopPoint_collection<breakpoint_site>& breakpoint_sites() const { return breakpoint_sites_; }
             /*
-             * Step over a single instruction within the process. Before performing a single
-             * step, a check is made to see if a breakpoint is enabled at the current program counter. If so, then the breakpoint is disabled and re-enabled again later.
+             * Step over a single instruction within the process. Before performing a single step, a check is made to see if a breakpoint is enabled at the
+             * current program counter. If so, then the breakpoint is disabled and re-enabled again later.
              */
             adb::stop_reason step_instruction();\
 
