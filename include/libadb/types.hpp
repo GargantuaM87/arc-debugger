@@ -58,7 +58,7 @@ namespace adb {
         private:
             std::uint64_t addr_ = 0;
     };
-    // serves as a view of an existing region of memory
+    // Serves as a view of an existing region of memory.
     template <class T>
     class span {
         public:
