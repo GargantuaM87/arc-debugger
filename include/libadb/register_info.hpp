@@ -9,26 +9,31 @@
 #include <sys/user.h>
 
 namespace adb {
+    // An ID type that represents an enumeration of a defined register.
     enum class register_id { // gives each register its own enumerator value
         #define DEFINE_REGISTER(name,dwarf_id,size,offset,type,format) name
         #include "./detail/registers.inc"
         #undef DEFINE_REGISTER
     };
-
+    /* An enumeration of register types, including: General-Purpose Registers, Sub Registers, Floating-Point Registers,
+     * and Debug Registers
+        */
     enum class register_type {
         gpr, // general purpose register
         sub_gpr, // subregister of a gpr
         fpr, // floating-point register
         dr // debug register
     };
-
+    /*
+     * An enumeration of register formats, including: uint, double_float, long_double, and vector.
+     */
     enum class register_format {
         uint,
         double_float,
         long_double,
         vector
     };
-
+    // Information for a register.
     struct register_info {
         register_id id;
         std::string_view name;
@@ -48,7 +53,7 @@ namespace adb {
 }
 // parsing register info
 namespace adb {
-    // takes a comparator function and uses it to find a specific register info entry
+    // Takes in a function (comparator) as an argument, and uses it while looping through the available list of register infos.
     template <class F>
     const register_info& register_info_by(F f) {
         auto it = std::find_if(

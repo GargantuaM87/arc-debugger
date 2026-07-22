@@ -16,21 +16,24 @@ namespace adb {
         registers() = delete; // remove default construction
         registers(const registers&) = delete; // remove copy function
         registers& operator=(const registers&) = delete; // remove move function
-        // using varient (a discriminated union) means the variable can be any of these types at a given time and holds information ab the data being held
         using value = std::variant<
             std::uint8_t, std::uint16_t, std::uint32_t, std::uint64_t,
             std::int8_t, std::int16_t, std::int32_t, std::int64_t,
             float, double, long double,
             byte64, byte128>;
+        // Read a given register's info.
         value read(const register_info& info) const;
+        // Write a value to a given register's info.
         void write(const register_info& info, value val);
 
-        // using an ID to retrieve the register value as a specific type
+        /*
+         * Retrieve a given register's ID then read its corresponding info and return it as a value variant.
+         */
         template<class T>
         T read_by_id_as(register_id id) const {
             return std::get<T>(read(register_info_by_id(id))); // std::get will retrieve the type returned by std::variant
         }
-        // writing to a register given its ID
+        // Find register through the given ID, then write the value to it.
         void write_by_id(register_id id, value val) {
             write(register_info_by_id(id), val);
         }
