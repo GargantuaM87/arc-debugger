@@ -7,20 +7,21 @@
 #include <vector>
 
 namespace adb {
-    // using keyword allows for type aliases
+    // Type alias for an array of 8 bytes.
     using byte64 = std::array<std::byte, 8>;
+    // Type alias for an array of 16 bytes.
     using byte128 = std::array<std::byte, 16>;
 
     class virt_addr {
         public:
             virt_addr() = default;
             explicit virt_addr(std::uint64_t addr) : addr_(addr) {}
-
+            // Return address.
             std::uint64_t addr() const {
                 return addr_;
             }
 
-            // boilerplate code
+            // A bunch of boilerplate code for different operations.
             virt_addr operator+(std::int64_t offset) const {
                 return virt_addr(addr_ + offset);
             }
@@ -66,9 +67,11 @@ namespace adb {
             span(T* data, T* end) : data_(data), size_(end-data) {}
             template <class U>
             span(const std::vector<U>& vec) : data_(vec.data()), size_(vec.size()) {}
-
+            // Return the beginning of this region of memory.
             T* begin() const { return data_; }
+            // Return the end of this region of memory, which is usually the beginning offsetted by the size of the region.
             T* end() const { return data_ + size_; }
+            // The size of this region of memory.
             std::size_t size() const { return size_; }
             T& operator[](std::size_t n) { return *(data_ + n); }
         private:

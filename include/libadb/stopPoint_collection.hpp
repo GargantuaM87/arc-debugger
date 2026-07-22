@@ -11,28 +11,36 @@ namespace adb {
     template <class StopPoint>
     class stopPoint_collection {
         public:
+            // Add a stop point to the collection.
             StopPoint& push(std::unique_ptr<StopPoint> bs);
-
+            // Find if the collection contains a stop point of the corresponding ID.
             bool contains_id(typename StopPoint::id_type id) const;
+            // Find if the collection contains a stop point at the corresponding address.
             bool contains_address(virt_addr address) const;
+            // Find if the collection contains a stop point that is enabled at the corresponding address.
             bool enabled_stopPoint_at_address(virt_addr address) const;
-
+            // Return a stop point based on its ID.
             StopPoint& get_by_id(typename StopPoint::id_type id);
+            // Return a stop point based on its ID.
             const StopPoint& get_by_id(typename StopPoint::id_type id) const;
+            // Return a stop point based on its address.
             StopPoint& get_by_address(virt_addr address);
+            // Return a stop point based on its address.
             const StopPoint& get_by_address(virt_addr address) const;
-
+            // Remove a stop point based on its ID.
             void remove_by_id(typename StopPoint::id_type id);
+            // Remove a stop point based on its address.
             void remove_by_address(virt_addr address);
 
             template <class F>
             void for_each(F f);
             template <class F>
             void for_each(F f) const;
-
+            // Return the size of the collection.
             std::size_t size() const {return stopPoints_.size();}
+            // Test if the collection is empty.
             bool empty() const {return stopPoints_.empty();}
-
+            /* Return a vector of stop points from this collection that are within the given virtual address range. The range is exclusive. */
             std::vector<StopPoint*> get_in_region(virt_addr low, virt_addr high) const;
         private:
             using points_t = std::vector<std::unique_ptr<StopPoint>>;
