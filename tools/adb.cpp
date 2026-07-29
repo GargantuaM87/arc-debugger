@@ -1,3 +1,4 @@
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -19,7 +20,15 @@
 #include "../include/libadb/parse.hpp"
 #include "../include/libadb/disassembler.hpp"
 
-// Anonymous namespace so we can reuse the same names in different files
+// Go over and organize this file someday
+
+namespace {
+    adb::process* g_adb_process = nullptr;
+
+    void handle_sigint(int) {
+        kill(g_adb_process->pid(), SIGSTOP);
+    }
+}
 namespace {
     void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions);
     void handle_stop(adb::process& process, adb::stop_reason reason);
@@ -401,7 +410,7 @@ namespace {
             process.watchpoints().for_each([&](auto& point){
                 fmt::print("{}: address = {:#x}, mode {}, size = {}, {}\n",
                     point.id(), point.address().addr(), stopPoint_mode_to_string(point.mode()), point.size(),
-                    point.is_enabled ? "enabled" : "disabled");
+                    point.is_enabled() ? "enabled" : "disabled");
             });
 
             }
@@ -514,7 +523,7 @@ namespace {
             std::cerr << "Unknown command" << std::endl;
         }
     }
-}
+
 
 namespace {
     void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions) {
@@ -573,6 +582,8 @@ int main(int argc, const char** argv) {
     }
     try {
         auto process = attatch(argc, argv);
+        g_adb_process = process.get();
+        signal(SIGINT, handle_sigint);
         main_loop(process);
     }
     catch(const adb::error& err) {
