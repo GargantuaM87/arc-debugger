@@ -15,6 +15,11 @@ namespace adb {
             watchpoint& operator=(const watchpoint&) = delete; // Move operation
 
             using id_type = std::int32_t;
+            // Current value at the watchpoint's address.
+            std::uint64_t data() const { return data_; }
+            // Previous value that this watchpoint pointed to. Useful for tracking data changes.
+            std::uint64_t prev_data() const { return prev_data_; }
+            void update_data();
             // Return this watchpoint's ID.
             id_type id() const { return id_; }
             // Enable watchpoint.
@@ -41,6 +46,8 @@ namespace adb {
             friend process;
             watchpoint(process& proc, virt_addr address, stopPoint_mode mode, std::size_t size);
 
+            uint64_t data_ = 0;
+            uint64_t prev_data_ = 0;
             id_type id_;
             process* process_;
             virt_addr address_;

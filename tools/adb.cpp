@@ -30,58 +30,16 @@ namespace {
     }
 }
 namespace {
+    // Print disassembled assembly code from machine code.
     void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions);
     void handle_stop(adb::process& process, adb::stop_reason reason);
+    std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason);
+    void print_help(const std::vector<std::string>& args);
+    bool is_prefix(std::string_view str, std::string_view of);
 }
+
+// Register Namespace
 namespace {
-
-    std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
-        // Passing PID
-        if(argc == 3 && argv[1] == std::string_view("-p")) { // comparing string contents instead of memory contents
-            pid_t pid = std::atoi(argv[2]); // conversion from string to integer
-            return adb::process::attatch(pid);
-        }
-       // Passing program name
-        else {
-           const char* program_path = argv[1];
-           auto proc = adb::process::launch(program_path);
-           fmt::print("Launched porocess with PID {}\n", proc->pid());
-           return proc;
-       }
-    }
-}
-namespace {
-    std::vector<std::string> split(std::string_view str, char delimiter) {
-        std::vector<std::string> out{};
-        std::stringstream ss {std::string{str}}; // like a string builder in Java
-        std::string item;
-
-        while(std::getline(ss, item, delimiter)) {
-            out.push_back(item);
-        }
-        return out;
-    }
-    bool is_prefix(std::string_view str, std::string_view of) {
-        if(str.size() > of.size()) return false; // as a prefix of a word is supposed to be smaller
-        return std::equal(str.begin(), str.end(), of.begin()); // if the string has any occurence of the prefix word
-    }
-    void print_stop_reason(const adb::process& process, adb::stop_reason reason) {
-        std::string message;
-
-       switch(reason.reason) {
-       case adb::process_state::exited:
-            message = fmt::format("exited with status {}", static_cast<int>(reason.info));
-            break;
-       case adb::process_state::terminated:
-            message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
-            break;
-       case adb::process_state::stopped:
-            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), process.get_pc().addr());
-            break;
-       }
-       fmt::print("Process {} {}\n", process.pid(), message);
-    }
-
     adb::registers::value parse_register_value(adb::register_info info, std::string_view text) {
         try {
             if(info.format == adb::register_format::uint) {
@@ -109,64 +67,6 @@ namespace {
         }
         catch(...) {}
         adb::error::send("Invalid format");
-    }
-
-    void print_help(const std::vector<std::string>& args) {
-        if(args.size() == 1) {
-            std::cerr << R"(Available commands:
-    breakpoint  - Commands for operating on breakpoints
-    continue    - Resume the process
-    disassemble - Disassemble machine code to assembly
-    memory      - Commands for operating on memory
-    register    - Commands for operating on registers
-    step        - Step over a single instruction
-    watchpoint  - Commands for operating on watchpoints
-            )";
-        }
-        else if(is_prefix(args[1], "register")) {
-            std::cerr << R"(Available commands:
-    read
-    read <register>
-    read all
-    write <register> <value>
-            )";
-        }
-        else if(is_prefix(args[1], "breakpoint")) {
-            std::cerr << R"(Available commands:
-
-                list
-                delete <id>
-                disable <id>
-                enable <id>
-                set <address>
-                set <address> -h
-            )";
-        }
-        else if(is_prefix(args[1], "memory")) {
-            std::cerr << R"(Available commands:
-                read <address>
-                read <address> <number of bytes>
-                write <address> <bytes>
-            )";
-        }
-        else if(is_prefix(args[1], "disassemble")) {
-            std::cerr << R"(Available options:
-                -c <number of instructions>
-                -a <start address>
-            )";
-        }
-        else if(is_prefix(args[1], "watchpoint")) {
-            std::cerr << R"(Available commands:
-                list
-                delete <id>
-                disable <id>
-                enable <id>
-                set <address> <w|rx|x> <size>
-            )";
-        }
-        else {
-            std::cerr << "No help available on that\n";
-        }
     }
 
     void handle_register_read(adb::process& process, const std::vector<std::string>& args) {
@@ -240,7 +140,9 @@ namespace {
             print_help({"help", "register"});
         }
     }
-
+}
+// Software/Hardware Breakpoints Namespace
+namespace {
     void handle_breakpoint_command(adb::process& process, const std::vector<std::string>& args) {
         if(args.size() < 2) {
             print_help({"help", "breakpoint"});
@@ -256,8 +158,7 @@ namespace {
                 fmt::print("Current breakpoints\n");
                 process.breakpoint_sites().for_each([](auto& site) {
                     if(site.is_internal()) return; // we don't care about internal breakpoints
-                    fmt::print("{}: address = {:#}, {}\n",
-                        site.id(), site.address().addr(), site.is_enabled() ? "enabled" : "disabled");
+                    fmt::print("{}: address = {:#}, {}\n", site.id(), site.address().addr(), site.is_enabled() ? "enabled" : "disabled");
 
                 });
             }
@@ -307,6 +208,119 @@ namespace {
             process.breakpoint_sites().remove_by_id(*id);
         }
     }
+}
+namespace {
+
+    std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
+        // Passing PID
+        if(argc == 3 && argv[1] == std::string_view("-p")) { // comparing string contents instead of memory contents
+            pid_t pid = std::atoi(argv[2]); // conversion from string to integer
+            return adb::process::attatch(pid);
+        }
+       // Passing program name
+        else {
+           const char* program_path = argv[1];
+           auto proc = adb::process::launch(program_path);
+           fmt::print("Launched porocess with PID {}\n", proc->pid());
+           return proc;
+       }
+    }
+}
+namespace {
+    std::vector<std::string> split(std::string_view str, char delimiter) {
+        std::vector<std::string> out{};
+        std::stringstream ss {std::string{str}}; // like a string builder in Java
+        std::string item;
+
+        while(std::getline(ss, item, delimiter)) {
+            out.push_back(item);
+        }
+        return out;
+    }
+    bool is_prefix(std::string_view str, std::string_view of) {
+        if(str.size() > of.size()) return false; // as a prefix of a word is supposed to be smaller
+        return std::equal(str.begin(), str.end(), of.begin()); // if the string has any occurence of the prefix word
+    }
+    void print_stop_reason(const adb::process& process, adb::stop_reason reason) {
+        std::string message;
+
+       switch(reason.reason) {
+       case adb::process_state::exited:
+            message = fmt::format("exited with status {}", static_cast<int>(reason.info));
+            break;
+       case adb::process_state::terminated:
+            message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
+            break;
+       case adb::process_state::stopped:
+            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), process.get_pc().addr());
+            if(reason.info == SIGTRAP) {
+                message += get_sigtrap_info(process, reason);
+            }
+            break;
+       }
+       fmt::print("Process {} {}\n", process.pid(), message);
+    }
+
+    void print_help(const std::vector<std::string>& args) {
+        if(args.size() == 1) {
+            std::cerr << R"(Available commands:
+    breakpoint  - Commands for operating on breakpoints
+    continue    - Resume the process
+    disassemble - Disassemble machine code to assembly
+    memory      - Commands for operating on memory
+    register    - Commands for operating on registers
+    step        - Step over a single instruction
+    watchpoint  - Commands for operating on watchpoints
+            )";
+        }
+        else if(is_prefix(args[1], "register")) {
+            std::cerr << R"(Available commands:
+    read
+    read <register>
+    read all
+    write <register> <value>
+            )";
+        }
+        else if(is_prefix(args[1], "breakpoint")) {
+            std::cerr << R"(Available commands:
+
+                list
+                delete <id>
+                disable <id>
+                enable <id>
+                set <address>
+                set <address> -h
+            )";
+        }
+        else if(is_prefix(args[1], "memory")) {
+            std::cerr << R"(Available commands:
+                read <address>
+                read <address> <number of bytes>
+                write <address> <bytes>
+            )";
+        }
+        else if(is_prefix(args[1], "disassemble")) {
+            std::cerr << R"(Available options:
+                -c <number of instructions>
+                -a <start address>
+            )";
+        }
+        else if(is_prefix(args[1], "watchpoint")) {
+            std::cerr << R"(Available commands:
+                list
+                delete <id>
+                disable <id>
+                enable <id>
+                set <address> <w|rw|x> <size>
+            )";
+        }
+        else {
+            std::cerr << "No help available on that\n";
+        }
+    }
+
+
+
 
     void handle_memory_read_command(adb::process& process, const std::vector<std::string>& args) {
         auto address = adb::to_integral<std::uint64_t>(args[2], 16);
@@ -407,8 +421,8 @@ namespace {
         // print watchpoint details to user
         else {
             fmt::print("Current Watchpoints:\n");
-            process.watchpoints().for_each([&](auto& point){
-                fmt::print("{}: address = {:#x}, mode {}, size = {}, {}\n",
+            process.watchpoints().for_each([&](auto& point) {
+                fmt::print("{}: address = {:#x}, mode = {}, size = {}, {}\n",
                     point.id(), point.address().addr(), stopPoint_mode_to_string(point.mode()), point.size(),
                     point.is_enabled() ? "enabled" : "disabled");
             });
@@ -463,7 +477,7 @@ namespace {
             return;
         }
         if(is_prefix(command, "set")) {
-           // handle_watchpoint_set(process, args);
+            handle_watchpoint_set(process, args);
             return;
         }
         if(args.size() < 3) {
@@ -545,6 +559,39 @@ namespace {
                 print_disassembly(process, process.get_pc(), 5); // print 5 lines of disassembly starting from program counter
             }
         }
+}
+
+namespace {
+    std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason) {
+        if(reason.trap_reason == adb::trap_type::software_break) {
+            auto& site = process.breakpoint_sites().get_by_address(process.get_pc());
+            return fmt::format(" (breakpoint {})", site.id());
+        }
+
+        if(reason.trap_reason == adb::trap_type::hardware_break) {
+            auto id = process.get_current_hardware_stoppoint();
+
+            if(id.index() == 0) {
+                return fmt::format( " (breakpoint{})", std::get<0>(id));
+            }
+
+            std::string message;
+            auto& point = process.watchpoints().get_by_id(std::get<1>(id));
+            message += fmt::format(" (watchpoint {})", point.id());
+
+            if(point.data() == point.prev_data()) {
+                message += fmt::format("\nValue: {:#x}", point.data());
+            }
+            else {
+                message += fmt::format("\nOld Value: {:#x}\nNew Value: {:#x}", point.prev_data(), point.data());
+            }
+            return message;
+        }
+        if(reason.trap_reason == adb::trap_type::single_step) {
+            return " (single step)";
+        }
+        return "";
+    }
 }
 
 namespace {

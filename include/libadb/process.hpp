@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <memory.h>
 #include <optional>
+#include <variant>
 #include <vector>
 #include <sys/types.h>
 #include <sys/user.h>
@@ -23,12 +24,20 @@ namespace adb {
         exited,
         terminated
     };
+    // Describes whether a SIGTRAP occured due to a single step, software or hardware breakpoint, or an unknown reason.
+    enum class trap_type {
+        single_step,
+        software_break,
+        hardware_break,
+        unknown
+    };
 
     struct stop_reason {
         stop_reason(int wait_status);
 
         process_state reason;
         std::uint8_t info;
+        std::optional<trap_type> trap_reason;
     };
 
     class process {
@@ -114,6 +123,8 @@ namespace adb {
                 auto data = read_memory(address, sizeof(T)); // reads amount of memory equal to the size of the type
                 return from_bytes<T>(data.data());
             }
+            // Find hardware breakpoint or watchpoint that caused this process to SIGTRAP.
+            std::variant<breakpoint_site::id_type, watchpoint::id_type> get_current_hardware_stoppoint() const;
             // Find and enable an available hardware breakpoint.
             int set_hardware_breakpoint(breakpoint_site::id_type id, virt_addr address);
             // Disable a hardware breakpoint through its index.
@@ -146,6 +157,8 @@ namespace adb {
             void read_all_registers(); // populate registers when the process halts
 
             int set_hardware_stoppoint(virt_addr address, adb::stopPoint_mode mode, std::size_t size);
+
+            void augment_stop_reason(stop_reason& reason);
     };
 }
 

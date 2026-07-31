@@ -15,8 +15,10 @@
 #include <unistd.h>
 #include <sys/personality.h>
 #include <sys/uio.h>
+#include <utility>
 
 namespace {
+    // Terminate program execution while writing to a pipe about the encountered error.
     void exit_with_perror(adb::pipe& channel, std::string const& prefix) {
         auto message = prefix + ": " + std::strerror(errno);
         channel.write(reinterpret_cast<std::byte*>(message.data()), message.size());
@@ -161,15 +163,27 @@ adb::stop_reason adb::process::wait_on_signal() {
     if(waitpid(pid_, &wait_status, options) < 0) {
         error::send_errno("waitpid failed");
     }
-    stop_reason reason(wait_status); // construct a new stop_reason object
+    stop_reason reason(wait_status);
     state_ = reason.reason; // set current process state to what made it stop
 
     if(is_attatched and state_ == process_state::stopped) {
         read_all_registers();
+        augment_stop_reason(reason);
         // after stopping at a SIGTRAP, if the address 1 byte below the PC is an enabled breakpoint, then point at that breakpoint
         auto instr_begin = get_pc() - 1;
-        if(reason.info == SIGTRAP and breakpoint_sites_.enabled_stopPoint_at_address(instr_begin))
-            set_pc(instr_begin);
+        if(reason.info == SIGTRAP) { // if software break, walk back program 1 byte before int3 instruction
+            if(reason.trap_reason == trap_type::software_break and
+                breakpoint_sites_.contains_address(instr_begin) and
+                breakpoint_sites_.get_by_address(instr_begin).is_enabled()) {
+                    set_pc(instr_begin);
+                }
+            else if(reason.trap_reason == trap_type::hardware_break) {
+                auto id = get_current_hardware_stoppoint();
+                if(id.index() == 1) {
+                    watchpoints_.get_by_id(std::get<1>(id)).update_data();
+                }
+            }
+        }
     }
 
     return reason;
@@ -367,4 +381,46 @@ void adb::process::clear_hardware_stoppoint(int index) {
 
 int adb::process::set_watchpoint(adb::watchpoint::id_type id, virt_addr address, stopPoint_mode mode, std::size_t size) {
     return set_hardware_stoppoint(address, mode, size);
+}
+
+void adb::process::augment_stop_reason(adb::stop_reason& reason) {
+    siginfo_t info;
+
+    if(ptrace(PTRACE_GETSIGINFO, pid_, nullptr, &info) < 0) {
+        adb::error::send_errno("Failed to get signal info");
+    }
+
+    reason.trap_reason = trap_type::unknown;
+    if(reason.info == SIGTRAP) {
+        switch(info.si_code) {
+            case TRAP_TRACE:
+                reason.trap_reason = trap_type::single_step;
+                break;
+            case SI_KERNEL:
+                reason.trap_reason = trap_type::software_break;
+                break;
+            case TRAP_HWBKPT:
+                reason.trap_reason = trap_type::hardware_break;
+                break;
+        }
+    }
+}
+
+std::variant<adb::breakpoint_site::id_type, adb::watchpoint::id_type> adb::process::get_current_hardware_stoppoint() const {
+    auto& regs = get_registers();
+    auto status = regs.read_by_id_as<std::uint64_t>(register_id::dr6);
+    auto index = __builtin_ctzll(status); // find index of the set bit for debug status register
+
+    auto id = static_cast<int>(register_id::dr0) + index;
+    auto addr = virt_addr(regs.read_by_id_as<std::uint64_t>(static_cast<register_id>(id))); // getting the address at which the stop point is set
+
+    using ret = std::variant<adb::breakpoint_site::id_type, adb::watchpoint::id_type>;
+    if(breakpoint_sites_.contains_address(addr)) {
+        auto site_id = breakpoint_sites_.get_by_address(addr).id();
+        return ret{std::in_place_index<0>, site_id};
+    }
+    else {
+        auto watch_id = watchpoints_.get_by_address(addr).id();
+        return ret {std::in_place_index<1>, watch_id};
+    }
 }
