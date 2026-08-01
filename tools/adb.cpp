@@ -22,6 +22,31 @@
 
 // Go over and organize this file someday
 
+#define COLORS \
+    X(BLACK, 30) \
+    X(RED, 31) \
+    X(GREEN, 32) \
+    X(YELLOW, 33) \
+    X(BLUE, 34) \
+    X(PURPLE, 35) \
+    X(CYAN, 36) \
+    X(WHITE, 37)
+
+// Utility Functions
+namespace {
+    enum Colors : uint8_t {
+        #define X(value, a) value = (a),
+            COLORS
+        #undef X
+    };
+
+    //Converts a given text into another color or format based on the given color code.
+    std::string ansi(std::string text, int color, int bold = 0) {
+        std::string res = fmt::format("\e[{};{}m{}\e[0m", bold, color, text);
+        return res;
+    }
+}
+
 namespace {
     adb::process* g_adb_process = nullptr;
 
@@ -158,7 +183,7 @@ namespace {
                 fmt::print("Current breakpoints\n");
                 process.breakpoint_sites().for_each([](auto& site) {
                     if(site.is_internal()) return; // we don't care about internal breakpoints
-                    fmt::print("{}: address = {:#}, {}\n", site.id(), site.address().addr(), site.is_enabled() ? "enabled" : "disabled");
+                    fmt::print("{}: address = {:#}, {}\n", site.id(), site.address().addr(), site.is_enabled() ? ansi("enabled", Colors::GREEN, 1) : ansi("disabled", Colors::RED, 1));
 
                 });
             }
@@ -221,7 +246,7 @@ namespace {
         else {
            const char* program_path = argv[1];
            auto proc = adb::process::launch(program_path);
-           fmt::print("Launched porocess with PID {}\n", proc->pid());
+           fmt::print(ansi("Launched process with PID {}\n", BLUE, 1), proc->pid());
            return proc;
        }
     }
