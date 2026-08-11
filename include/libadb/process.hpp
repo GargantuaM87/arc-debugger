@@ -18,6 +18,37 @@
 #include "./watchpoint.hpp"
 
 namespace adb {
+
+    class syscall_catch_policy {
+        public:
+            // Expresses if we want to catch NO syscalls, CERTAIN syscalls or ALL syscalls
+            enum mode {
+                none,
+                some,
+                all
+            };
+
+            static syscall_catch_policy catch_all() {
+                return { mode::all, {} };
+            }
+
+            static syscall_catch_policy catch_none() {
+                return { mode::none, {} };
+            }
+
+            static syscall_catch_policy catch_some(std::vector<int> to_catch) {
+                return { mode::some, std::move(to_catch) };
+            }
+
+            mode get_mode() const { return mode_; }
+            const std::vector<int>& get_to_catch() const { return to_catch_; }
+
+        private:
+            syscall_catch_policy(mode mode, std::vector<int> to_catch) : mode_(mode), to_catch_(std::move(to_catch)) {}
+            mode mode_ = mode::none;
+            std::vector<int> to_catch_;
+    };
+
     enum class process_state {
         stopped,
         running,
@@ -29,7 +60,18 @@ namespace adb {
         single_step,
         software_break,
         hardware_break,
+        syscall,
         unknown
+    };
+
+    struct syscall_information {
+        std::uint16_t id;
+        bool entry; // if the syscall was entered or exited
+        // union allows these elements to share storage with each other
+        union {
+            std::array<std::uint64_t, 6> args; // store arguments to syscall (only for entry events)
+            std::int64_t return_code; // return code (only for exit events)
+        };
     };
 
     struct stop_reason {
@@ -38,6 +80,7 @@ namespace adb {
         process_state reason;
         std::uint8_t info;
         std::optional<trap_type> trap_reason;
+        std::optional<syscall_information> syscall_info;
     };
 
     class process {
@@ -140,6 +183,10 @@ namespace adb {
             const stopPoint_collection<watchpoint>& watchpoints() const {
                 return watchpoints_;
             }
+            // Change the current catch policy for catching system call IDs.
+            void set_syscall_catch_policy(syscall_catch_policy info) {
+                syscall_catch_policy_ = std::move(info);
+            }
 
 
         private:
@@ -147,9 +194,11 @@ namespace adb {
             process_state state_ = process_state::stopped;
             bool terminate_on_end_ = true;
             bool is_attatched = true;
+            bool syscall_exit = false;
             std::unique_ptr<registers> registers_;
             stopPoint_collection<breakpoint_site> breakpoint_sites_;
             stopPoint_collection<watchpoint> watchpoints_;
+            syscall_catch_policy syscall_catch_policy_ = syscall_catch_policy::catch_none();
 
             process(pid_t pid, bool terminate_on_end, bool is_attatched) : pid_(pid), terminate_on_end_(terminate_on_end),
                                                                            is_attatched(is_attatched), registers_(new registers(*this)) { }
@@ -159,6 +208,8 @@ namespace adb {
             int set_hardware_stoppoint(virt_addr address, adb::stopPoint_mode mode, std::size_t size);
 
             void augment_stop_reason(stop_reason& reason);
+
+            adb::stop_reason resume_from_syscall(const stop_reason& reason);
     };
 }
 

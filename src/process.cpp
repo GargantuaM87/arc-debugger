@@ -18,6 +18,15 @@
 #include <utility>
 
 namespace {
+    // enable PTRACE_0_TRACESYSGOOD option so we can distinguish between SIGTRAP signals that come from syscalls
+    void set_ptrace_options(pid_t pid) {
+        if(ptrace(PTRACE_SETOPTIONS, pid, nullptr, PTRACE_O_TRACESYSGOOD) < 0) {
+            adb::error::send_errno("Failed to set TRACESYSGOOD option");
+        }
+    }
+}
+
+namespace {
     // Terminate program execution while writing to a pipe about the encountered error.
     void exit_with_perror(adb::pipe& channel, std::string const& prefix) {
         auto message = prefix + ": " + std::strerror(errno);
@@ -99,8 +108,10 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, b
 
     std::unique_ptr<process> proc (new process(pid, true, debug)); // private constructor used within the own class
 
-    if(debug)
+    if(debug) {
         proc->wait_on_signal();
+        set_ptrace_options(proc->pid());
+    }
 
     return proc;
 }
@@ -114,6 +125,7 @@ std::unique_ptr<adb::process> adb::process::attatch(pid_t pid) {
     }
     std::unique_ptr<process> proc (new process(pid, false, true)); // terminate_on_end is false since we're not launching a process
     proc->wait_on_signal();
+    set_ptrace_options(proc->pid());
 
     return proc;
 }
@@ -151,7 +163,9 @@ void adb::process::resume() {
         }
         bp.enable(); // enable breakpoint again
     }
-    if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
+    // inferior can trap whenever a syscall or entered or exited
+    auto request = syscall_catch_policy_.get_mode() == syscall_catch_policy::mode::none ? PTRACE_CONT : PTRACE_SYSCALL;
+    if (ptrace(request, pid_, nullptr, nullptr) < 0) {
         error::send_errno("Could not resume");
     }
     state_ = process_state::running;
@@ -389,6 +403,41 @@ void adb::process::augment_stop_reason(adb::stop_reason& reason) {
     if(ptrace(PTRACE_GETSIGINFO, pid_, nullptr, &info) < 0) {
         adb::error::send_errno("Failed to get signal info");
     }
+
+    if(reason.info == (SIGTRAP | 0x80)) {
+        // Syscall Info
+        auto& sys_info = reason.syscall_info.emplace();
+        auto& regs = get_registers();
+
+        if(syscall_exit) {
+            // Handle Enter
+            sys_info.entry = false;
+            sys_info.id = regs.read_by_id_as<u_int64_t>(adb::register_id::orig_rax);
+            sys_info.return_code = regs.read_by_id_as<u_int64_t>(adb::register_id::rax);
+            syscall_exit = false;
+        }
+        else {
+            // Handle Entry
+            sys_info.entry = true;
+            sys_info.id = regs.read_by_id_as<u_int64_t>(adb::register_id::orig_rax);
+
+            std::array<register_id, 6> arg_regs = {
+                register_id::rdi, register_id::rsi, register_id::rdx,
+                register_id::r10, register_id::r8, register_id::r9
+            };
+
+            for(auto i = 0; i < 6; i++) {
+                sys_info.args[i] = regs.read_by_id_as<u_int64_t>(arg_regs[i]);
+            }
+            syscall_exit = true;
+        }
+
+        reason.info = SIGTRAP;
+        reason.trap_reason = trap_type::syscall;
+        return;
+    }
+
+    syscall_exit = false;
 
     reason.trap_reason = trap_type::unknown;
     if(reason.info == SIGTRAP) {
