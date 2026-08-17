@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <unistd.h>
 #include <fcntl.h>
@@ -19,6 +20,7 @@ adb::pipe::~pipe() { //RAII standard
 int adb::pipe::release_read() {
     return std::exchange(fds_[read_fd], -1);
 }
+
 
 int adb::pipe::release_write() {
     return std::exchange(fds_[write_fd], -1);

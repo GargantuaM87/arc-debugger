@@ -3,6 +3,7 @@
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/pipe.hpp"
 #include "../include/libadb/bit.hpp"
+#include "../include/libadb/syscalls.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -455,4 +456,11 @@ TEST_CASE("Watchpoint detects read", "[watchpoint]") {
     proc->wait_on_signal();
 
     REQUIRE(to_string_view(channel.read()) == "Replacing devs with AI...\n");
+}
+
+TEST_CASE("Syscall mapping works", "[syscall]") {
+    REQUIRE(adb::syscall_id_to_name(0) == "read");
+    REQUIRE(adb::syscall_name_to_id("read") == 0);
+    REQUIRE(adb::syscall_id_to_name(62) == "kill");
+    REQUIRE(adb::syscall_name_to_id("kill") == 62);
 }

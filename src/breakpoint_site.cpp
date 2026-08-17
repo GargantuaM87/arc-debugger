@@ -18,7 +18,7 @@ adb::breakpoint_site::breakpoint_site(process& proc, virt_addr address, bool is_
     id_ = is_internal_ ? -1 : get_next_id(); // internal breakpoints get the ID -1
 }
 
-void adb::breakpoint_site::enable() {
+void adb::breakpoint_site::enable(){
     if (is_enabled_) return;
 
     if(is_hardware_) {

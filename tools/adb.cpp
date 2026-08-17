@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <iterator>
 #include <sched.h>
 #include <string_view>
 #include <string>
@@ -19,6 +20,7 @@
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/parse.hpp"
 #include "../include/libadb/disassembler.hpp"
+#include "../include/libadb/syscalls.hpp"
 
 // Go over and organize this file someday
 
@@ -54,6 +56,7 @@ namespace {
         kill(g_adb_process->pid(), SIGSTOP);
     }
 }
+// Forward Declarations
 namespace {
     // Print disassembled assembly code from machine code.
     void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t n_instructions);
@@ -61,6 +64,7 @@ namespace {
     std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason);
     void print_help(const std::vector<std::string>& args);
     bool is_prefix(std::string_view str, std::string_view of);
+    std::vector<std::string> split(std::string_view str, char delimiter);
 }
 
 // Register Namespace
@@ -234,6 +238,40 @@ namespace {
         }
     }
 }
+
+// Catchpoint Namespace
+namespace {
+    void handle_syscall_catchpoint_command(adb::process& proc, const std::vector<std::string>& args) {
+        adb::syscall_catch_policy policy = adb::syscall_catch_policy::catch_all();
+
+        if(args.size() == 3 and args[2] == "none") {
+            policy = adb::syscall_catch_policy::catch_none();
+        }
+        else if(args.size() >= 3) {
+            auto syscalls = split(args[2], ',');
+            std::vector<int> to_catch;
+            std::transform(begin(syscalls), end(syscalls), std::back_inserter(to_catch),
+                    [](auto& syscall) {
+                        return isdigit(syscall[0]) ?
+                                adb::to_integral<int>(syscall).value() :
+                                adb::syscall_name_to_id(syscall);
+                    });
+            policy = adb::syscall_catch_policy::catch_some(std::move(to_catch));
+        }
+        proc.set_syscall_catch_policy(std::move(policy));
+    }
+    void handle_catchpoint_command(adb::process& proc, const std::vector<std::string>& args) {
+        if(args.size() < 2) {
+            print_help( {"help", "catchpoint"} );
+            return;
+        }
+        if(is_prefix(args[1], "syscall")) {
+            handle_syscall_catchpoint_command(proc, args);
+        }
+    }
+
+}
+
 namespace {
 
     std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
@@ -296,6 +334,7 @@ namespace {
     register    - Commands for operating on registers
     step        - Step over a single instruction
     watchpoint  - Commands for operating on watchpoints
+    catchpoints - Commands for operating on catchpoints
             )";
         }
         else if(is_prefix(args[1], "register")) {
@@ -337,6 +376,13 @@ namespace {
                 disable <id>
                 enable <id>
                 set <address> <w|rw|x> <size>
+            )";
+        }
+        else if(is_prefix(args[1], "catchpoint")) {
+            std::cerr << R"(Available commands:
+                syscall
+                syscall none
+                syscall <list of syscall IDs/names>
             )";
         }
         else {
@@ -558,6 +604,9 @@ namespace {
         else if(is_prefix(command, "watchpoint")) {
             handle_watchpoint_command(*process, args);
         }
+        else if(is_prefix(command, "catchpoint")) {
+            handle_catchpoint_command(*process, args);
+        }
         else {
             std::cerr << "Unknown command" << std::endl;
         }
@@ -614,6 +663,22 @@ namespace {
         }
         if(reason.trap_reason == adb::trap_type::single_step) {
             return " (single step)";
+        }
+        if(reason.trap_reason == adb::trap_type::syscall) {
+            const auto& info = *reason.syscall_info;
+            std::string message = " ";
+
+            if(info.entry) {
+                message += "(Syscall Entry)\n";
+                message += fmt::format("Syscall: {}({:#x})",
+                        adb::syscall_id_to_name(info.id),
+                        fmt::join(info.args, ","));
+            }
+            else {
+                message += "(Syscall Exit)\n";
+                message += fmt::format("Syscall Returned: {:#x}", info.return_code);
+            }
+            return message;
         }
         return "";
     }

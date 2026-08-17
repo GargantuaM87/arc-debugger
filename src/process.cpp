@@ -197,6 +197,9 @@ adb::stop_reason adb::process::wait_on_signal() {
                     watchpoints_.get_by_id(std::get<1>(id)).update_data();
                 }
             }
+            else if(reason.trap_reason == trap_type::syscall) {
+                reason = resume_from_syscall(reason);
+            }
         }
     }
 
@@ -472,4 +475,18 @@ std::variant<adb::breakpoint_site::id_type, adb::watchpoint::id_type> adb::proce
         auto watch_id = watchpoints_.get_by_address(addr).id();
         return ret {std::in_place_index<1>, watch_id};
     }
+}
+
+
+adb::stop_reason adb::process::resume_from_syscall(const stop_reason& reason) {
+    if(syscall_catch_policy_.get_mode() == adb::syscall_catch_policy::mode::some) {
+        auto& to_catch = syscall_catch_policy_.get_to_catch();
+        auto found = std::find(begin(to_catch), end(to_catch), reason.syscall_info->id);
+
+        if(found == end(to_catch)) {
+            resume();
+            return wait_on_signal();
+        }
+    }
+    return reason;
 }
