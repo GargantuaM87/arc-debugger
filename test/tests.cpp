@@ -14,6 +14,7 @@
 #include <fstream>
 #include <string_view>
 #include <elf.h>
+#include <fcntl.h>
 
 using namespace adb;
 
@@ -463,4 +464,33 @@ TEST_CASE("Syscall mapping works", "[syscall]") {
     REQUIRE(adb::syscall_name_to_id("read") == 0);
     REQUIRE(adb::syscall_id_to_name(62) == "kill");
     REQUIRE(adb::syscall_name_to_id("kill") == 62);
+}
+
+TEST_CASE("Syscall catchpoints work", "[catchpoints]") {
+    auto dev_null = open("/dev/null", O_WRONLY);
+    auto proc = process::launch("./targets/anti_debugger", true, dev_null);
+
+    auto write_syscall = adb::syscall_name_to_id("write");
+    auto policy = adb::syscall_catch_policy::catch_some( { write_syscall } );
+    proc->set_syscall_catch_policy(policy);
+
+    proc->resume();
+    auto reason = proc->wait_on_signal();
+
+    REQUIRE(reason.reason == adb::process_state::stopped);
+    REQUIRE(reason.info == SIGTRAP);
+    REQUIRE(reason.trap_reason == adb::trap_type::syscall);
+    REQUIRE(reason.syscall_info->id == write_syscall);
+    REQUIRE(reason.syscall_info->entry == true);
+
+    proc->resume();
+    reason = proc->wait_on_signal();
+
+    REQUIRE(reason.reason == adb::process_state::stopped);
+    REQUIRE(reason.info == SIGTRAP);
+    REQUIRE(reason.trap_reason == adb::trap_type::syscall);
+    REQUIRE(reason.syscall_info->id == write_syscall);
+    REQUIRE(reason.syscall_info->entry == false);
+
+    close(dev_null);
 }
