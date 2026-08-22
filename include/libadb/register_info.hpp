@@ -78,5 +78,4 @@ namespace adb {
         return register_info_by([dwarf_id](auto& i) { return i.dwarf_id == dwarf_id; });
     }
 }
-
 #endif

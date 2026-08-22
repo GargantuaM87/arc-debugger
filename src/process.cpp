@@ -79,7 +79,6 @@ std::unique_ptr<adb::process> adb::process::launch(std::filesystem::path path, b
         }
         personality(ADDR_NO_RANDOMIZE);
     }
-
     if(pid == 0) {
         // won't be needing this after we're inside the child process
         channel.close_read(); // parent will close its write end. On the parent side, we read the other end and throw an exception if the child wrote anything to it
