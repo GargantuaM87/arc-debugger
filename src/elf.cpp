@@ -1,5 +1,8 @@
 #include <elf.h>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <string_view>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -32,6 +35,7 @@ adb::elf::elf(const std::filesystem::path& path) {
 
     std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
     parse_section_headers();
+    build_section_map();
 }
 
 adb::elf::~elf() {
@@ -51,5 +55,41 @@ void adb::elf::parse_section_headers() {
 
 std::string_view adb::elf::section_name(std::size_t index) const {
     auto& section = section_headers[header_.e_shstrndx]; // storing the section name string table
-    return { reinterpret_cast<char*>(data_) + section.sh_size + index }; // return the string that starts at the given inex into section
+    return { reinterpret_cast<char*>(data_) + section.sh_size + index }; // return the string that starts at the given index into section
+}
+
+void adb::elf::build_section_map() {
+    // section name to reference to the section's header
+    for(auto& section : section_headers) {
+        section_map[section_name(section.sh_name)] = &section;
+    }
+}
+
+std::optional<const Elf64_Shdr*> adb::elf::get_section(std::string_view name) const {
+    if(section_map.count(name) == 0) {
+        return std::nullopt;
+    }
+
+    return section_map.at(name);
+}
+
+adb::span<const std::byte> adb::elf::get_section_contents(std::string_view name) const {
+    if(auto sect = get_section(name); sect) {
+        return { data_ + sect.value()->sh_offset, sect.value()->sh_size };
+    }
+
+    return { nullptr, std::size_t(0) };
+}
+
+std::string_view adb::elf::get_string(std::size_t index) const {
+    // grab section header corresponding to either .strtab or .dynstr (general string table and dynamic string table respectively)
+    auto opt_strtab = get_section(".strtab");
+    if(!opt_strtab) {
+        opt_strtab = get_section(".dynstr");
+        if(!opt_strtab)
+            return "";
+    }
+    return {
+        reinterpret_cast<char*>(data_) + opt_strtab.value()->sh_offset + index
+    };
 }
