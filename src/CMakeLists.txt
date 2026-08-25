@@ -1,5 +1,5 @@
 add_library(libadb process.cpp pipe.cpp registers.cpp breakpoint_site.cpp
-disassembler.cpp watchpoint.cpp syscalls.cpp elf.cpp)
+disassembler.cpp watchpoint.cpp syscalls.cpp elf.cpp types.cpp)
 add_library(adb::libadb ALIAS libadb)
 target_link_libraries(libadb PRIVATE Zydis::Zydis)
 

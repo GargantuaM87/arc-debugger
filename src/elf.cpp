@@ -93,3 +93,44 @@ std::string_view adb::elf::get_string(std::size_t index) const {
         reinterpret_cast<char*>(data_) + opt_strtab.value()->sh_offset + index
     };
 }
+
+const Elf64_Shdr* adb::elf::get_section_with_addr(adb::file_addr addr) const {
+    if(addr.elf_file() != this) return nullptr;
+
+    for(auto& section : section_headers) {
+        if(section.sh_addr <= addr.addr() and section.sh_addr + section.sh_size > addr.addr()) {
+            return &section;
+        }
+    }
+    return nullptr;
+}
+
+const Elf64_Shdr* adb::elf::get_section_with_addr(adb::virt_addr addr) const {
+    for(auto& section : section_headers) {
+        if(load_bias_ + section.sh_addr <= addr and load_bias_ + section.sh_addr + section.sh_size > addr) {
+            return &section;
+        }
+    }
+    return nullptr;
+}
+
+std::optional<adb::file_addr> adb::elf::get_section_start_addr(std::string_view name) const {
+    if(auto sect = get_section(name); sect) {
+        return file_addr { *this, sect.value()->sh_addr };
+    }
+    return std::nullopt;
+}
+
+void adb::elf::parse_symbol_table() {
+    auto opt_symtab = get_section(".symtab");
+
+    if(!opt_symtab) {
+        opt_symtab = get_section("dynsym");
+        if(!opt_symtab)
+            return;
+    }
+
+    auto symtab = *opt_symtab;
+    symbol_table.resize(symtab->sh_size / symtab->sh_entsize);
+    std::copy(data_ + symtab->sh_offset, data_ + symtab->sh_offset + symtab->sh_size, reinterpret_cast<std::byte*>(symbol_table.data()));
+}
