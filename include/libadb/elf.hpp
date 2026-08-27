@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <optional>
 #include "./types.hpp"
 
@@ -61,8 +62,17 @@ namespace adb {
             std::vector<Elf64_Sym> symbol_table;
 
             void build_section_map();
+            void build_symbol_maps();
 
             std::unordered_map<std::string_view, Elf64_Shdr*> section_map;
+            std::unordered_multimap<std::string_view, Elf64_Sym*> symbol_name_map;
+
+            struct range_comparator {
+                bool operator() (std::pair<file_addr, file_addr> lhs, std::pair<file_addr, file_addr> rhs) const {
+                    return lhs.first < rhs.first;
+                }
+            };
+            std::map<std::pair<file_addr, file_addr>, Elf64_Sym*, range_comparator> symbol_addr_map;
     };
 }
 

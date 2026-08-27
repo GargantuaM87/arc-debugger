@@ -8,9 +8,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cxxabi.h>
+#include <algorithm>
 #include "../include/libadb/elf.hpp"
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/bit.hpp"
+
 
 adb::elf::elf(const std::filesystem::path& path) {
     path_ = path;
@@ -36,6 +39,7 @@ adb::elf::elf(const std::filesystem::path& path) {
     std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
     parse_section_headers();
     build_section_map();
+    build_symbol_maps();
 }
 
 adb::elf::~elf() {
@@ -122,10 +126,10 @@ std::optional<adb::file_addr> adb::elf::get_section_start_addr(std::string_view 
 }
 
 void adb::elf::parse_symbol_table() {
-    auto opt_symtab = get_section(".symtab");
+    auto opt_symtab = get_section(".symtab"); // complete symbol table
 
     if(!opt_symtab) {
-        opt_symtab = get_section("dynsym");
+        opt_symtab = get_section("dynsym"); // abbreviated symbol table
         if(!opt_symtab)
             return;
     }
@@ -134,3 +138,32 @@ void adb::elf::parse_symbol_table() {
     symbol_table.resize(symtab->sh_size / symtab->sh_entsize);
     std::copy(data_ + symtab->sh_offset, data_ + symtab->sh_offset + symtab->sh_size, reinterpret_cast<std::byte*>(symbol_table.data()));
 }
+
+void adb::elf::build_symbol_maps() {
+    for(auto& symbol : symbol_table) {
+        auto mangled_name = get_string(symbol.st_name);
+        int demangle_status;
+        auto demanged_name = abi::__cxa_demangle(mangled_name.data(), nullptr, nullptr, &demangle_status);
+
+        if(demangle_status == 0) { // testing for potential mangled symbol then attempting to demangle the name
+            symbol_name_map.insert({ demanged_name, &symbol });
+            free(demanged_name);
+        }
+        symbol_name_map.insert( {mangled_name, &symbol} ); // add an entry for the symbol's (potentially) mangled name anyway
+        // if the symbol has an address and a name, and doesn't point to thread-local storage
+        if(symbol.st_value != 0 and symbol.st_name != 0 and ELF64_ST_TYPE(symbol.st_info) != STT_TLS) {
+            auto addr_range = std::pair(file_addr{*this, symbol.st_value}, file_addr{*this, symbol.st_value + symbol.st_size});
+            symbol_addr_map.insert({addr_range, &symbol});
+        }
+    }
+}
+
+std::vector<const Elf64_Sym*> adb::elf::get_symbols_by_name(std::string_view name) const {
+    auto [begin, end] = symbol_name_map.equal_range(name);
+
+    std::vector<const Elf64_Sym*> ret;
+    std::transform(begin, end, std::back_inserter(ret), [](auto& pair) { return pair.second; });
+    return ret;
+}
+
+
