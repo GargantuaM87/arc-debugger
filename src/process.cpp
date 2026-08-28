@@ -15,7 +15,10 @@
 #include <unistd.h>
 #include <sys/personality.h>
 #include <sys/uio.h>
+#include <unordered_map>
 #include <utility>
+#include <elf.h>
+#include <fstream>
 
 namespace {
     // enable PTRACE_0_TRACESYSGOOD option so we can distinguish between SIGTRAP signals that come from syscalls
@@ -489,3 +492,24 @@ adb::stop_reason adb::process::resume_from_syscall(const stop_reason& reason) {
     }
     return reason;
 }
+
+
+std::unordered_map<int, std::uint64_t> adb::process::get_auxv() const {
+    auto path = "/proc/" + std::to_string(pid_) + "/auxv"; // auxiliary vector file
+    std::ifstream auxv(path);
+
+    std::unordered_map<int, std::uint64_t> result;
+    // entries in /proc/<pid>/auxv are binary encoded pairs of 64-bit integers
+    std::uint64_t id, value;
+
+    auto read = [&](auto& into) {
+        auxv.read(reinterpret_cast<char*>(&into), sizeof(into));
+    };
+    // read data into id and value variables, then insert into map
+    for(read(id); id != AT_NULL; read(id)) {
+        read(value);
+        result[id] = value;
+    }
+    return result;
+}
+

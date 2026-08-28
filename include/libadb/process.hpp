@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <memory.h>
 #include <optional>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 #include <sys/types.h>
@@ -187,6 +188,7 @@ namespace adb {
             void set_syscall_catch_policy(syscall_catch_policy info) {
                 syscall_catch_policy_ = std::move(info);
             }
+            std::unordered_map<int, std::uint64_t> get_auxv() const;
 
 
         private:
