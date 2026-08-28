@@ -159,11 +159,59 @@ void adb::elf::build_symbol_maps() {
 }
 
 std::vector<const Elf64_Sym*> adb::elf::get_symbols_by_name(std::string_view name) const {
+    // structured binding
     auto [begin, end] = symbol_name_map.equal_range(name);
 
     std::vector<const Elf64_Sym*> ret;
     std::transform(begin, end, std::back_inserter(ret), [](auto& pair) { return pair.second; });
     return ret;
+}
+
+std::optional<const Elf64_Sym*> adb::elf::get_symbol_at_addr(adb::file_addr addr) const {
+    if(addr.elf_file() != this)
+        return std::nullopt;
+
+    adb::file_addr null_addr;
+    // finding symbol based on start address
+    auto it = symbol_addr_map.find( {addr, null_addr} );
+    if(it == end(symbol_addr_map))
+        return std::nullopt;
+    return it->second;
+}
+
+std::optional<const Elf64_Sym*> adb::elf::get_symbol_at_addr(adb::virt_addr addr) const {
+    // defer to previous method above
+    return get_symbol_at_addr(addr.to_file_addr(*this));
+}
+
+std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::file_addr addr) const {
+    if(addr.elf_file() != this or symbol_addr_map.empty())
+        return std::nullopt;
+
+    file_addr null_addr;
+    // find element that is equal to or greater than the given key
+    auto it = symbol_addr_map.lower_bound( {addr, null_addr} );
+    // if the address is the start address of the symbol
+    if(it != end(symbol_addr_map)) {
+        if(auto [key, value] = *it; key.first == addr) {
+            return value;
+        }
+    }
+    // there is no entry preceding the given address
+    if(it == begin(symbol_addr_map))
+        return std::nullopt;
+
+    it--;
+    // if the symbol is earlier than the given address, but spans past it
+    if(auto [key, value] = *it; key.first < addr and key.second > addr) {
+        return value;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::virt_addr addr) const {
+    return get_symbol_with_addr(addr.to_file_addr(*this));
 }
 
 

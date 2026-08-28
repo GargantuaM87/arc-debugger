@@ -43,13 +43,15 @@ namespace adb {
             std::optional<file_addr> get_section_start_addr(std::string_view name) const;
             // Read and store symbol tables (complete, abbreviated or none).
             void parse_symbol_table();
-
+            // Returns symbol by its given name.
             std::vector<const Elf64_Sym*> get_symbols_by_name(std::string_view name) const;
-
+            // Returns symbol at the given file adress.
             std::optional<const Elf64_Sym*> get_symbol_at_addr(file_addr addr) const;
+            // Returns symbol at the given virtual address.
             std::optional<const Elf64_Sym*> get_symbol_at_addr(virt_addr addr) const;
-
+            // Returns symbol that contains the given file address.
             std::optional<const Elf64_Sym*> get_symbol_with_addr(file_addr addr) const;
+            // Returns symbol at the given virtual address.
             std::optional<const Elf64_Sym*> get_symbol_with_addr(virt_addr addr) const;
         private:
             int fd_;
