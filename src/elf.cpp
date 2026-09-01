@@ -39,6 +39,7 @@ adb::elf::elf(const std::filesystem::path& path) {
     std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
     parse_section_headers();
     build_section_map();
+    parse_symbol_table();
     build_symbol_maps();
 }
 

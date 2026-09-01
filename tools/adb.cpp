@@ -21,6 +21,7 @@
 #include "../include/libadb/parse.hpp"
 #include "../include/libadb/disassembler.hpp"
 #include "../include/libadb/syscalls.hpp"
+#include "../include/libadb/target.hpp"
 
 // Go over and organize this file someday
 
@@ -59,11 +60,21 @@ namespace {
 // Forward Declarations
 namespace {
     // Print disassembled assembly code from machine code.
-    void handle_stop(adb::process& process, adb::stop_reason reason);
+    void handle_stop(adb::target& target, adb::stop_reason reason);
     std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason);
     void print_help(const std::vector<std::string>& args);
     bool is_prefix(std::string_view str, std::string_view of);
     std::vector<std::string> split(std::string_view str, char delimiter);
+}
+
+// Signal Namespace
+
+namespace {
+    std::string get_signal_stop_reason(const adb::target& target, adb::stop_reason reason) {
+        auto& process = target.get_process();
+        std::string message = fmt::format("stopped with signal {} at {:#x}",
+                sigabbrev_np(reason.info), process.get_pc().addr());
+    }
 }
 
 // Memory Namespace
@@ -471,18 +482,18 @@ namespace {
 
 namespace {
 
-    std::unique_ptr<adb::process> attatch(int argc, const char** argv) {
+    std::unique_ptr<adb::target> attatch(int argc, const char** argv) {
         // Passing PID
         if(argc == 3 && argv[1] == std::string_view("-p")) { // comparing string contents instead of memory contents
             pid_t pid = std::atoi(argv[2]); // conversion from string to integer
-            return adb::process::attatch(pid);
+            return adb::target::attatch(pid);
         }
        // Passing program name
         else {
            const char* program_path = argv[1];
-           auto proc = adb::process::launch(program_path);
-           fmt::print(ansi("Launched process with PID {}\n", BLUE, 1), proc->pid());
-           return proc;
+           auto target = adb::target::launch(program_path);
+           fmt::print(ansi("Launched process with PID {}\n", BLUE, 1), target->get_process().pid());
+           return target;
        }
     }
 }
@@ -501,24 +512,23 @@ namespace {
         if(str.size() > of.size()) return false; // as a prefix of a word is supposed to be smaller
         return std::equal(str.begin(), str.end(), of.begin()); // if the string has any occurence of the prefix word
     }
-    void print_stop_reason(const adb::process& process, adb::stop_reason reason) {
+    void print_stop_reason(const adb::target& target, adb::stop_reason reason) {
         std::string message;
-
-       switch(reason.reason) {
-       case adb::process_state::exited:
+        switch(reason.reason) {
+        case adb::process_state::exited:
             message = fmt::format("exited with status {}", static_cast<int>(reason.info));
             break;
-       case adb::process_state::terminated:
+        case adb::process_state::terminated:
             message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
             break;
-       case adb::process_state::stopped:
-            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), process.get_pc().addr());
+        case adb::process_state::stopped:
+            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), target.get_process().get_pc().addr());
             if(reason.info == SIGTRAP) {
-                message += get_sigtrap_info(process, reason);
+                message += get_sigtrap_info(target.get_process(), reason);
             }
             break;
        }
-       fmt::print("Process {} {}\n", process.pid(), message);
+       fmt::print("Process {} {}\n", target.get_process().pid(), message);
     }
 
     void print_help(const std::vector<std::string>& args) {
@@ -588,14 +598,16 @@ namespace {
     }
 
 
-    void handle_command(std::unique_ptr<adb::process>& process, std::string_view line) {
+    void handle_command(std::unique_ptr<adb::target>& target, std::string_view line) {
         auto args = split(line, ' ');
         auto command = args[0];
+
+        auto process = &target->get_process();
 
         if(is_prefix(command, "continue")) {
             process->resume();
             auto reason = process->wait_on_signal();
-            handle_stop(*process, reason);
+            handle_stop(*target, reason);
         }
         else if(is_prefix(command, "help")) {
             print_help(args);
@@ -608,7 +620,7 @@ namespace {
         }
         else if(is_prefix(command, "step")) {
             auto reason = process->step_instruction();
-            handle_stop(*process, reason);
+            handle_stop(*target, reason);
         }
         else if(is_prefix(command, "memory")) {
             handle_memory_command(*process, args);
@@ -628,12 +640,12 @@ namespace {
     }
 
 namespace {
-    void handle_stop(adb::process &process, adb::stop_reason reason) {
-            print_stop_reason(process, reason);
+    void handle_stop(adb::target& target, adb::stop_reason reason) {
+            print_stop_reason(target, reason);
             // if process stopped due to a signal
             if(reason.reason == adb::process_state::stopped)
             {
-                print_disassembly(process, process.get_pc(), 5); // print 5 lines of disassembly starting from program counter
+                print_disassembly(target.get_process(), target.get_process().get_pc(), 5); // print 5 lines of disassembly starting from program counter
             }
         }
 }
@@ -688,7 +700,7 @@ namespace {
 }
 
 namespace {
-    void main_loop(std::unique_ptr<adb::process>& process) {
+    void main_loop(std::unique_ptr<adb::target>& target) {
         char* line = nullptr;
         while ((line = readline("adb> ")) != nullptr) {
             std::string line_str;
@@ -706,7 +718,7 @@ namespace {
             }
             if(!line_str.empty()) {
                 try {
-                    handle_command(process, line_str);
+                    handle_command(target, line_str);
                 }
                 catch(const adb::error& err) {
                     std::cout << err.what() << std::endl;
@@ -721,10 +733,10 @@ int main(int argc, const char** argv) {
         return -1;
     }
     try {
-        auto process = attatch(argc, argv);
-        g_adb_process = process.get();
+        auto target = attatch(argc, argv);
+        g_adb_process = &target->get_process();
         signal(SIGINT, handle_sigint);
-        main_loop(process);
+        main_loop(target);
     }
     catch(const adb::error& err) {
         std::cout << err.what() << std::endl;
