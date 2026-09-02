@@ -1,5 +1,6 @@
 #include <elf.h>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -60,7 +61,7 @@ void adb::elf::parse_section_headers() {
 
 std::string_view adb::elf::section_name(std::size_t index) const {
     auto& section = section_headers[header_.e_shstrndx]; // storing the section name string table
-    return { reinterpret_cast<char*>(data_) + section.sh_size + index }; // return the string that starts at the given index into section
+    return { reinterpret_cast<char*>(data_) + section.sh_offset + index }; // return the string that starts at the given index into section
 }
 
 void adb::elf::build_section_map() {
@@ -130,7 +131,7 @@ void adb::elf::parse_symbol_table() {
     auto opt_symtab = get_section(".symtab"); // complete symbol table
 
     if(!opt_symtab) {
-        opt_symtab = get_section("dynsym"); // abbreviated symbol table
+        opt_symtab = get_section(".dynsym"); // abbreviated symbol table
         if(!opt_symtab)
             return;
     }
@@ -151,11 +152,13 @@ void adb::elf::build_symbol_maps() {
             free(demanged_name);
         }
         symbol_name_map.insert( {mangled_name, &symbol} ); // add an entry for the symbol's (potentially) mangled name anyway
+
         // if the symbol has an address and a name, and doesn't point to thread-local storage
         if(symbol.st_value != 0 and symbol.st_name != 0 and ELF64_ST_TYPE(symbol.st_info) != STT_TLS) {
             auto addr_range = std::pair(file_addr{*this, symbol.st_value}, file_addr{*this, symbol.st_value + symbol.st_size});
             symbol_addr_map.insert({addr_range, &symbol});
         }
+
     }
 }
 
@@ -186,8 +189,9 @@ std::optional<const Elf64_Sym*> adb::elf::get_symbol_at_addr(adb::virt_addr addr
 }
 
 std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::file_addr addr) const {
-    if(addr.elf_file() != this or symbol_addr_map.empty())
+    if(addr.elf_file() != this or symbol_addr_map.empty()) {
         return std::nullopt;
+    }
 
     file_addr null_addr;
     // find element that is equal to or greater than the given key
@@ -202,7 +206,7 @@ std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::file_addr ad
     if(it == begin(symbol_addr_map))
         return std::nullopt;
 
-    it--;
+    --it;
     // if the symbol is earlier than the given address, but spans past it
     if(auto [key, value] = *it; key.first < addr and key.second > addr) {
         return value;
@@ -214,5 +218,3 @@ std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::file_addr ad
 std::optional<const Elf64_Sym*> adb::elf::get_symbol_with_addr(adb::virt_addr addr) const {
     return get_symbol_with_addr(addr.to_file_addr(*this));
 }
-
-

@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <elf.h>
 #include <iostream>
 #include <iterator>
 #include <sched.h>
@@ -43,7 +44,7 @@ namespace {
         #undef X
     };
 
-    //Converts a given text into another color or format based on the given color code.
+    // Converts a given text into another color or format based on the given color code.
     std::string ansi(std::string text, int color, int bold = 0) {
         std::string res = fmt::format("\e[{};{}m{}\e[0m", bold, color, text);
         return res;
@@ -60,11 +61,12 @@ namespace {
 // Forward Declarations
 namespace {
     // Print disassembled assembly code from machine code.
-    void handle_stop(adb::target& target, adb::stop_reason reason);
     std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason);
     void print_help(const std::vector<std::string>& args);
     bool is_prefix(std::string_view str, std::string_view of);
     std::vector<std::string> split(std::string_view str, char delimiter);
+    void print_stop_reason(const adb::target& target, adb::stop_reason reason);
+    void print_disassembly(adb::process& process, adb::virt_addr address, std::size_t instructions);
 }
 
 // Signal Namespace
@@ -74,7 +76,76 @@ namespace {
         auto& process = target.get_process();
         std::string message = fmt::format("stopped with signal {} at {:#x}",
                 sigabbrev_np(reason.info), process.get_pc().addr());
+
+        auto func = target.get_elf().get_symbol_with_addr(process.get_pc());
+        // test if the retrieved symbol is a function
+        if(func and ELF64_ST_TYPE(func.value()->st_info) == STT_FUNC) {
+            // add function's name to the message
+            message += fmt::format(" ({})", target.get_elf().get_string(func.value()->st_name));
+        }
+
+        if(reason.info == SIGTRAP) {
+            message += get_sigtrap_info(process, reason);
+        }
+        return message;
     }
+
+    void handle_stop(adb::target& target, adb::stop_reason reason) {
+            print_stop_reason(target, reason);
+            // if process stopped due to a signal
+            if(reason.reason == adb::process_state::stopped)
+            {
+                print_disassembly(target.get_process(), target.get_process().get_pc(), 5); // print 5 lines of disassembly starting from program counter
+            }
+        }
+
+    std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason) {
+        if(reason.trap_reason == adb::trap_type::software_break) {
+            auto& site = process.breakpoint_sites().get_by_address(process.get_pc());
+            return fmt::format(" (breakpoint {})", site.id());
+        }
+
+        if(reason.trap_reason == adb::trap_type::hardware_break) {
+            auto id = process.get_current_hardware_stoppoint();
+
+            if(id.index() == 0) {
+                return fmt::format( " (breakpoint{})", std::get<0>(id));
+            }
+
+            std::string message;
+            auto& point = process.watchpoints().get_by_id(std::get<1>(id));
+            message += fmt::format(" (watchpoint {})", point.id());
+
+            if(point.data() == point.prev_data()) {
+                message += fmt::format("\nValue: {:#x}", point.data());
+            }
+            else {
+                message += fmt::format("\nOld Value: {:#x}\nNew Value: {:#x}", point.prev_data(), point.data());
+            }
+            return message;
+        }
+        if(reason.trap_reason == adb::trap_type::single_step) {
+            return " (single step)";
+        }
+        if(reason.trap_reason == adb::trap_type::syscall) {
+            const auto& info = *reason.syscall_info;
+            std::string message = " ";
+
+            if(info.entry) {
+                message += "(Syscall Entry)\n";
+                message += fmt::format("Syscall: {}({:#x})",
+                        adb::syscall_id_to_name(info.id),
+                        fmt::join(info.args, ","));
+            }
+            else {
+                message += "(Syscall Exit)\n";
+                message += fmt::format("Syscall Returned: {:#x}", info.return_code);
+            }
+            return message;
+        }
+        return "";
+    }
+
 }
 
 // Memory Namespace
@@ -522,10 +593,7 @@ namespace {
             message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
             break;
         case adb::process_state::stopped:
-            message = fmt::format("stopped with signal {} at {:#x}", sigabbrev_np(reason.info), target.get_process().get_pc().addr());
-            if(reason.info == SIGTRAP) {
-                message += get_sigtrap_info(target.get_process(), reason);
-            }
+            message = get_signal_stop_reason(target, reason);
             break;
        }
        fmt::print("Process {} {}\n", target.get_process().pid(), message);
@@ -639,65 +707,8 @@ namespace {
         }
     }
 
-namespace {
-    void handle_stop(adb::target& target, adb::stop_reason reason) {
-            print_stop_reason(target, reason);
-            // if process stopped due to a signal
-            if(reason.reason == adb::process_state::stopped)
-            {
-                print_disassembly(target.get_process(), target.get_process().get_pc(), 5); // print 5 lines of disassembly starting from program counter
-            }
-        }
 }
 
-namespace {
-    std::string get_sigtrap_info(const adb::process& process, adb::stop_reason reason) {
-        if(reason.trap_reason == adb::trap_type::software_break) {
-            auto& site = process.breakpoint_sites().get_by_address(process.get_pc());
-            return fmt::format(" (breakpoint {})", site.id());
-        }
-
-        if(reason.trap_reason == adb::trap_type::hardware_break) {
-            auto id = process.get_current_hardware_stoppoint();
-
-            if(id.index() == 0) {
-                return fmt::format( " (breakpoint{})", std::get<0>(id));
-            }
-
-            std::string message;
-            auto& point = process.watchpoints().get_by_id(std::get<1>(id));
-            message += fmt::format(" (watchpoint {})", point.id());
-
-            if(point.data() == point.prev_data()) {
-                message += fmt::format("\nValue: {:#x}", point.data());
-            }
-            else {
-                message += fmt::format("\nOld Value: {:#x}\nNew Value: {:#x}", point.prev_data(), point.data());
-            }
-            return message;
-        }
-        if(reason.trap_reason == adb::trap_type::single_step) {
-            return " (single step)";
-        }
-        if(reason.trap_reason == adb::trap_type::syscall) {
-            const auto& info = *reason.syscall_info;
-            std::string message = " ";
-
-            if(info.entry) {
-                message += "(Syscall Entry)\n";
-                message += fmt::format("Syscall: {}({:#x})",
-                        adb::syscall_id_to_name(info.id),
-                        fmt::join(info.args, ","));
-            }
-            else {
-                message += "(Syscall Exit)\n";
-                message += fmt::format("Syscall Returned: {:#x}", info.return_code);
-            }
-            return message;
-        }
-        return "";
-    }
-}
 
 namespace {
     void main_loop(std::unique_ptr<adb::target>& target) {
@@ -727,6 +738,7 @@ namespace {
         }
     }
 }
+
 int main(int argc, const char** argv) {
     if(argc == 1) {
         std::cerr << "No arguments given" << std::endl;
@@ -741,5 +753,5 @@ int main(int argc, const char** argv) {
     catch(const adb::error& err) {
         std::cout << err.what() << std::endl;
     }
+    return 0;
   }
-}
