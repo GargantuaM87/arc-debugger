@@ -3,6 +3,7 @@
 #include "../include/libadb/error.hpp"
 #include "../include/libadb/pipe.hpp"
 #include "../include/libadb/bit.hpp"
+#include "../include/libadb/target.hpp"
 #include "../include/libadb/syscalls.hpp"
 #include <cerrno>
 #include <cstdint>
@@ -15,6 +16,7 @@
 #include <string_view>
 #include <elf.h>
 #include <fcntl.h>
+
 
 using namespace adb;
 
@@ -494,3 +496,25 @@ TEST_CASE("Syscall catchpoints work", "[catchpoints]") {
 
     close(dev_null);
 }
+
+TEST_CASE("Elf parser works", "[elf]") {
+    auto path = "./targets/hello_adb";
+    adb::elf elf(path);
+    auto entry = elf.header().e_entry;
+    auto sym = elf.get_symbol_at_addr(file_addr{elf, entry});
+    auto name = elf.get_string(sym.value()->st_name);
+    REQUIRE(name == "_start");
+
+    auto syms = elf.get_symbols_by_name("_start");
+    name = elf.get_string(syms.at(0)->st_name);
+    REQUIRE(name == "_start");
+
+    // pretend ELF file is loaded at 0xcafecafe
+    elf.notify_loaded(virt_addr {0xcafecafe});
+    sym = elf.get_symbol_at_addr(virt_addr{0xcafecafe + entry});
+    name = elf.get_string(sym.value()->st_name);
+    REQUIRE(name == "_start");
+}
+
+
+
