@@ -22,8 +22,10 @@ void adb::breakpoint_site::enable(){
     if (is_enabled_) return;
 
     if(is_hardware_) {
+        // x64 is limited to 4 hardware breakpoints
         hardware_register_index_ = process_->set_hardware_breakpoint(id_, address_);
     }
+    // enabling software breakpoint
     else {
         errno = 0;
         std::uint64_t data = ptrace(PTRACE_PEEKDATA, process_->pid(), address_, nullptr);

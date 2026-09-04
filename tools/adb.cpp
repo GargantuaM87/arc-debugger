@@ -26,6 +26,8 @@
 
 // Go over and organize this file someday
 
+// White for default debugger actions.
+// Blue for address, instructions.
 #define COLORS \
     X(BLACK, 30) \
     X(RED, 31) \
@@ -74,7 +76,7 @@ namespace {
 namespace {
     std::string get_signal_stop_reason(const adb::target& target, adb::stop_reason reason) {
         auto& process = target.get_process();
-        std::string message = fmt::format("stopped with signal {} at {:#x}",
+        std::string message = fmt::format(ansi(" stopped with signal", WHITE, 1) + " {}" + " at" + " {:#x}",
                 sigabbrev_np(reason.info), process.get_pc().addr());
 
         auto func = target.get_elf().get_symbol_with_addr(process.get_pc());
@@ -513,7 +515,7 @@ namespace {
         auto instructions = disasm.disassemble(n_instructions, address);
         for(auto& instr : instructions) {
             // :#018x specifier prints a hexadecimal representation of the address with enough padding to stay vertically aligned
-            fmt::print("{:#018x}: {}\n", instr.address.addr(), instr.text);
+            fmt::print(ansi("{:#018x}: {}\n", BLUE, true), instr.address.addr(), instr.text);
         }
     }
 
@@ -563,7 +565,7 @@ namespace {
         else {
            const char* program_path = argv[1];
            auto target = adb::target::launch(program_path);
-           fmt::print(ansi("Launched process with PID {}\n", BLUE, 1), target->get_process().pid());
+           fmt::print(ansi("Launched process with PID {}\n", WHITE, 1), target->get_process().pid());
            return target;
        }
     }
@@ -596,7 +598,7 @@ namespace {
             message = get_signal_stop_reason(target, reason);
             break;
        }
-       fmt::print("Process {} {}\n", target.get_process().pid(), message);
+       fmt::print(ansi("Process {}", WHITE, 1) + "{}\n", target.get_process().pid(), message);
     }
 
     void print_help(const std::vector<std::string>& args) {
@@ -713,7 +715,7 @@ namespace {
 namespace {
     void main_loop(std::unique_ptr<adb::target>& target) {
         char* line = nullptr;
-        while ((line = readline("adb> ")) != nullptr) {
+        while ((line = readline(&ansi("adb> ", WHITE, 1)[0])) != nullptr) {
             std::string line_str;
 
             if(line == std::string_view("")) {
