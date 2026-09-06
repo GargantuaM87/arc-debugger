@@ -1,7 +1,7 @@
 # arcDebugger
 A process debugging tool that is currently work in progress.
 ## Features
-- Launches and Attatches to processes in order to debug
+- Launches and Attaches to processes in order to debug
 - Write to registers and read from them
 - Enable and disable software breakpoints
 - Enable and disable hardware breakpoints
@@ -9,8 +9,8 @@ A process debugging tool that is currently work in progress.
 - Enable and disable catch-points
 - Disassemble machine code to assembly
 - Single step over process instructions
+- Parse ELF file data
 ## Future Additions
-- Adding an ELF parser
 - Adding a DWARF parser
 
   

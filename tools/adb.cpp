@@ -28,6 +28,7 @@
 
 // White for default debugger actions.
 // Blue for address, instructions.
+// Cyan for signals.
 #define COLORS \
     X(BLACK, 30) \
     X(RED, 31) \
@@ -72,11 +73,13 @@ namespace {
 }
 
 // Signal Namespace
-
 namespace {
+    /*Construct a string that describes the reason for a process to stop (mainly due to signals). The string is ammended with information
+     *that provides the address at where the process stopped, the signal that stopped it, if it stopped at a symbol, and more.
+    */
     std::string get_signal_stop_reason(const adb::target& target, adb::stop_reason reason) {
         auto& process = target.get_process();
-        std::string message = fmt::format(ansi(" stopped with signal", WHITE, 1) + " {}" + " at" + " {:#x}",
+        std::string message = fmt::format(ansi(" stopped with signal", WHITE, 1) + ansi(" {}", CYAN, 1) + ansi(" at", WHITE, 1) + ansi(" {:#x}", BLUE, 1),
                 sigabbrev_np(reason.info), process.get_pc().addr());
 
         auto func = target.get_elf().get_symbol_with_addr(process.get_pc());
@@ -598,7 +601,7 @@ namespace {
             message = get_signal_stop_reason(target, reason);
             break;
        }
-       fmt::print(ansi("Process {}", WHITE, 1) + "{}\n", target.get_process().pid(), message);
+       fmt::print(ansi("Process {} ", WHITE, 1) + "{}\n", target.get_process().pid(), message);
     }
 
     void print_help(const std::vector<std::string>& args) {
@@ -705,7 +708,7 @@ namespace {
             handle_catchpoint_command(*process, args);
         }
         else {
-            std::cerr << "Unknown command" << std::endl;
+            std::cerr << ansi("Unknown command", RED, 1) << std::endl;
         }
     }
 
