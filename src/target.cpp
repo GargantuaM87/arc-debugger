@@ -10,8 +10,8 @@ namespace {
     std::unique_ptr<adb::elf> create_loaded_elf(const adb::process& proc, const std::filesystem::path& path) {
         auto auxv = proc.get_auxv(); // obtaining the auxiliary vector
         auto obj = std::make_unique<adb::elf>(path);
-        /* setting load bias of .text section by subtracting the load address of the entry point in the ELF header
-        *  from the actual load address of the entry point
+        /* setting load bias of .text section by subtracting the load address of the entry point in the ELF header (file address)
+        *  from the actual load address of the entry point (virtual address)
         */
         obj->notify_loaded(adb::virt_addr(auxv[AT_ENTRY] - obj->header().e_entry));
         return obj;
@@ -30,4 +30,3 @@ std::unique_ptr<adb::target> adb::target::attatch(pid_t pid) {
     auto obj = create_loaded_elf(*proc, elf_path);
     return std::unique_ptr<target>(new target(std::move(proc), std::move(obj)));
 }
-
