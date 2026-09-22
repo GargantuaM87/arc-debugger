@@ -4,8 +4,22 @@
 #include "./detail/dwarf.h"
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 namespace adb {
+    struct attr_spec {
+        std::uint64_t attr;
+        std::uint64_t form;
+    };
+
+    struct abbrev {
+        std::uint64_t code;
+        std::uint64_t tag;
+        bool has_children;
+        std::vector<attr_spec> attr_specs;
+    };
+
+
     class elf;
     class dwarf {
         public:

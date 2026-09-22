@@ -2,6 +2,7 @@
 #include "../include/libadb/types.hpp"
 #include "../include/libadb/bit.hpp"
 #include <cstdint>
+#include <iterator>
 #include <string_view>
 #include <unordered_map>
 #include <algorithm>
@@ -43,6 +44,21 @@ namespace {
         // For parsing ULEB128 format
         std::uint64_t uleb128() {
             std::uint64_t result = 0;
+            int shift = 0; // how much to shift the next byte to the left
+
+            std::uint8_t byte = 0;
+
+            do {
+                byte = u8();
+                auto masked = static_cast<uint64_t>(byte & 0x7f); // mask off first bit
+                result |= masked << shift;
+                shift += 7;
+            } while ((byte & 0x80) != 0);
+            return result;
+        }
+
+        std::uint64_t sleb128() {
+            std::int64_t result = 0;
             int shift = 0;
 
             std::uint8_t byte = 0;
@@ -53,8 +69,15 @@ namespace {
                 result |= masked << shift;
                 shift += 7;
             } while ((byte & 0x80) != 0);
+            // checking if we filled the result integer
+            // also checking whether the number should be negative by checking whether the last byte read has a 1 in its second-highest position
+            if ((shift < sizeof(result) * 8) and (byte & 0x40)) {
+                result |= (~static_cast<std::uint64_t>(0) << shift);
+            }
+
             return result;
         }
+
 
         const std::byte* position() const { return pos_; }
 
@@ -66,6 +89,12 @@ namespace {
             adb::span<const std::byte> data_;
             const std::byte* pos_;
     };
+}
+
+namespace {
+    std::unordered_map<std::uint64_t, adb::abbrev> parse_abbrev_table(const adb::elf& obj, std::size_t offset) {
+
+    }
 }
 
 const std::unordered_map<std::uint64_t, adb::abbrev>& adb::dwarf::get_abbrev_table(std::size_t offset) {
