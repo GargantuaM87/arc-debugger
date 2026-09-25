@@ -1,6 +1,7 @@
 #include "../include/libadb/dwarf.hpp"
 #include "../include/libadb/types.hpp"
 #include "../include/libadb/bit.hpp"
+#include "../include/libadb/elf.hpp"
 #include <cstdint>
 #include <iterator>
 #include <string_view>
@@ -93,7 +94,40 @@ namespace {
 
 namespace {
     std::unordered_map<std::uint64_t, adb::abbrev> parse_abbrev_table(const adb::elf& obj, std::size_t offset) {
+        cursor cur(obj.get_section_contents(".debug_abbrev")); // get pre-defined section that cross references with DWARF file's content
+        cur += offset;
 
+        std::unordered_map<uint64_t, adb::abbrev> table;
+        std::uint64_t code = 0;
+
+        // extract ULEB128 code and tag
+        // 1-byte uint for children flag
+        // list of ULEB128 pairs of attribute types and forms, terminated by a pair of 0s
+        do {
+            // Parse one entry
+            code = cur.uleb128();
+            auto tag = cur.uleb128();
+            auto has_children = static_cast<bool>(cur.u8());
+
+            std::vector<adb::attr_spec> attr_specs;
+            std::uint64_t attr = 0;
+
+            do {
+                attr = cur.uleb128();
+                auto form = cur.uleb128();
+
+                if (attr != 0) {
+                    attr_specs.push_back(adb::attr_spec{ attr, form });
+                }
+            } while(attr != 0);
+
+            if(code != 0) {
+                table.emplace(code, adb::abbrev {code, tag, has_children, std::move(attr_specs)});
+            }
+
+        } while (code != 0);
+
+        return table;
     }
 }
 
@@ -102,6 +136,10 @@ const std::unordered_map<std::uint64_t, adb::abbrev>& adb::dwarf::get_abbrev_tab
         abbrev_tables_.emplace(offset, parse_abbrev_table(*elf_, offset));
     }
     return abbrev_tables_.at(offset);
+}
+
+const std::unordered_map<uint64_t, adb::abbrev>& adb::compile_unit::abbrev_table() const {
+    return parent_->get_abbrev_table(offset_);
 }
 
 
