@@ -2,11 +2,15 @@
 #include "../include/libadb/types.hpp"
 #include "../include/libadb/bit.hpp"
 #include "../include/libadb/elf.hpp"
+#include "../include/libadb/error.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <algorithm>
+#include <vector>
 
 namespace {
     class cursor {
@@ -129,6 +133,43 @@ namespace {
 
         return table;
     }
+
+    std::unique_ptr<adb::compile_unit> parse_compile_unit(adb::dwarf& dwarf, const adb::elf& obj, cursor cur) {
+        auto start = cur.position();
+        auto size = cur.u32(); // byte size of the info for compile unit
+        auto version = cur.u16(); // version of DWARF
+        auto abbrev = cur.u32(); // offset into abbreviation table
+        auto address_size = cur.u8(); // size of an address (should be 8)
+
+        if(size == 0xffffffff) {
+            adb::error::send("Only DWARF32 is supported");
+        }
+        if(version != 4) {
+            adb::error::send("Only DWARF version 4 is supported");
+        }
+        if(address_size != 8) {
+            adb::error::send("Invalid address size for DWARF");
+        }
+
+        size += sizeof(std::uint32_t);
+
+        adb::span<const std::byte> data = {start, size};
+        return std::make_unique<adb::compile_unit>(dwarf, data, abbrev);
+
+    }
+
+    std::vector<std::unique_ptr<adb::compile_unit>> parse_compile_units(adb::dwarf& dwarf, const adb::elf& obj) {
+        auto debug_info = obj.get_section_contents(".debug_info");
+        cursor cur(debug_info);
+
+        std::vector<std::unique_ptr<adb::compile_unit>> units;
+        while(!cur.finished()) {
+            auto unit = parse_compile_unit(dwarf, obj, cur);
+            cur += unit->data().size();
+            units.push_back(std::move(unit));
+        }
+        return units;
+    }
 }
 
 const std::unordered_map<std::uint64_t, adb::abbrev>& adb::dwarf::get_abbrev_table(std::size_t offset) {
@@ -141,5 +182,11 @@ const std::unordered_map<std::uint64_t, adb::abbrev>& adb::dwarf::get_abbrev_tab
 const std::unordered_map<uint64_t, adb::abbrev>& adb::compile_unit::abbrev_table() const {
     return parent_->get_abbrev_table(offset_);
 }
+
+adb::dwarf::dwarf(const adb::elf& parent) : elf_(&parent) {
+    compile_units_ = parse_compile_units(*this, parent);
+}
+
+
 
 
