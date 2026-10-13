@@ -83,6 +83,43 @@ namespace {
             return result;
         }
 
+        void skip_form(std::uint64_t form) {
+            switch(form) {
+                // presence of an attribute
+                case DW_FORM_flag_present:
+                    break;
+
+                case DW_FORM_data1:
+                case DW_FORM_ref1:
+                case DW_FORM_flag:
+                    pos_ += 1; break;
+
+                case DW_FORM_data2:
+                case DW_FORM_ref2:
+                    pos_ += 2; break;
+
+                case DW_FORM_data4:
+                case DW_FORM_ref4:
+                case DW_FORM_ref_addr:
+                case DW_FORM_sec_offset:
+                case DW_FORM_strp:
+                    pos_ += 4; break;
+
+                case DW_FORM_data8:
+                case DW_FORM_addr:
+                    pos_ += 8; break;
+
+                case DW_FORM_sdata:
+                    sleb128(); break;
+                case DW_FORM_udata:
+                case DW_FORM_ref_udata:
+                    uleb128(); break;
+
+
+                default: adb::error::send("Unrecognized DWARF form");
+            }
+        }
+
 
         const std::byte* position() const { return pos_; }
 
@@ -170,6 +207,28 @@ namespace {
         }
         return units;
     }
+
+    adb::DIE parse_die(const adb::compile_unit& cu, cursor cur) {
+        auto pos = cur.position();
+        auto abbrev_code = cur.uleb128();
+
+        if(abbrev_code == 0) { // Means this DIE is null
+            auto next = cur.position(); // store the position of the cursor and send it into the DIE
+            return adb::DIE { next };
+        }
+        // If the DIE isn't null...
+        auto& abbrev_table = cu.abbrev_table();
+        auto& abbrev = abbrev_table.at(abbrev_code); // Find entry for DIE
+
+        std::vector<const std::byte*> attr_locs;
+        attr_locs.reserve(abbrev.attr_specs.size()); // remove unnecessary dynamic memory allocations
+        for(auto& attr : abbrev.attr_specs) {
+            attr_locs.push_back(cur.position());
+            cur.skip_form(attr.form); // skip over in bytes
+        }
+        auto next = cur.position();
+        return adb::DIE(pos, &cu, &abbrev, std::move(attr_locs), next);
+    }
 }
 
 const std::unordered_map<std::uint64_t, adb::abbrev>& adb::dwarf::get_abbrev_table(std::size_t offset) {
@@ -186,6 +245,14 @@ const std::unordered_map<uint64_t, adb::abbrev>& adb::compile_unit::abbrev_table
 adb::dwarf::dwarf(const adb::elf& parent) : elf_(&parent) {
     compile_units_ = parse_compile_units(*this, parent);
 }
+
+adb::DIE adb::compile_unit::root() const {
+    std::size_t header_size = 11; // the size of a compile unit header is 11 bytes, so the DIE for it is 11 bytes past the beginning of its data_ member.
+    cursor cur( {data_.begin() + header_size, data_.end()});
+    return parse_die(*this, cur);
+}
+
+
 
 
 
