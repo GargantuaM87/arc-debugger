@@ -88,7 +88,7 @@ namespace {
                 // presence of an attribute
                 case DW_FORM_flag_present:
                     break;
-
+                // Fixed-width forms
                 case DW_FORM_data1:
                 case DW_FORM_ref1:
                 case DW_FORM_flag:
@@ -109,12 +109,38 @@ namespace {
                 case DW_FORM_addr:
                     pos_ += 8; break;
 
+                // LEB128 forms
                 case DW_FORM_sdata:
                     sleb128(); break;
                 case DW_FORM_udata:
                 case DW_FORM_ref_udata:
                     uleb128(); break;
 
+                // Data block forms whose size is encoded as a ULEB128 or fixed-sized integer
+                case DW_FORM_block1:
+                    pos_ += u8(); break;
+                case DW_FORM_block2:
+                    pos_ += u16(); break;
+                case DW_FORM_block4:
+                    pos_ += u32(); break;
+                case DW_FORM_block:
+                case DW_FORM_exprloc:
+                    pos_ += uleb128();
+                    break;
+
+
+                // Strings
+                case DW_FORM_string:
+                    while(!finished() && *pos_ != std::byte(0)) {
+                        ++pos_;
+                    }
+                    ++pos_;
+                    break;
+
+                // Indirect form
+                case DW_FORM_indirect:
+                    skip_form(uleb128());
+                    break;
 
                 default: adb::error::send("Unrecognized DWARF form");
             }
@@ -250,6 +276,10 @@ adb::DIE adb::compile_unit::root() const {
     std::size_t header_size = 11; // the size of a compile unit header is 11 bytes, so the DIE for it is 11 bytes past the beginning of its data_ member.
     cursor cur( {data_.begin() + header_size, data_.end()});
     return parse_die(*this, cur);
+}
+
+adb::DIE::children_range::iterator::iterator(const adb::DIE& die) {
+
 }
 
 

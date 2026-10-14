@@ -3,10 +3,14 @@
 
 #include "./detail/dwarf.h"
 #include "./types.hpp"
+#include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
+#include <optional>
 
 namespace adb {
     struct attr_spec {
@@ -53,12 +57,62 @@ class DIE {
         const std::byte* position() { return pos_; }
         const std::byte* next() const { return next_; }
 
+        class children_range;
+        children_range children() const;
+
     private:
         const std::byte* pos_ = nullptr;
         const compile_unit* comp_unit_ = nullptr;
         const abbrev* abbrev_ = nullptr;
         const std::byte* next_ = nullptr;
         std::vector<const std::byte*> attr_locs_; // locations of attributes
+};
+
+class DIE::children_range {
+    public:
+       children_range(DIE die) : die_(std::move(die)) {}
+       class iterator {
+           // Basic iterator operations
+           public:
+               // Types we need to expose so we can use algorithms from <algorith> and <numeric>
+               using value_type = DIE;
+               using reference = const DIE&;
+               using pointer = const DIE*;
+               using difference_type = std::ptrdiff_t;
+               using iterator_category = std::forward_iterator_tag;
+
+               iterator() = default;
+               iterator(const iterator&) = default;
+               iterator& operator=(const iterator&) = default;
+
+               explicit iterator(const DIE& die);
+
+               const DIE& operator*() const { return *die_; }
+               const DIE* operator->() const { return &die_.value(); }
+
+               iterator& operator++();
+               iterator& operator++(int);
+
+               bool operator==(const iterator& rhs) const;
+               bool operator!=(const iterator& rhs) const {
+                   return !(*this == rhs);
+               }
+
+            private:
+               std::optional<DIE> die_;
+
+       };
+
+       iterator begin() const {
+           if(die_.abbrev_->has_children) {
+               return iterator{ die_ };
+           }
+           return end();
+       }
+       iterator end() const { return iterator{}; }
+
+    private:
+       DIE die_;
 };
 
     class elf;
