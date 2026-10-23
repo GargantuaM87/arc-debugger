@@ -52,9 +52,9 @@ class DIE {
         DIE(const std::byte* pos, const compile_unit* cu, const abbrev* abbrev, std::vector<const std::byte*> attr_locs, const std::byte* next)
             : pos_(pos), comp_unit_(cu), abbrev_(abbrev), attr_locs_(std::move(attr_locs)), next_(next) {}
 
-        const compile_unit* comp_unit() { return comp_unit_; }
-        const abbrev* abbrev_entry() { return abbrev_; }
-        const std::byte* position() { return pos_; }
+        const compile_unit* comp_unit() const { return comp_unit_; }
+        const abbrev* abbrev_entry() const { return abbrev_; }
+        const std::byte* position() const { return pos_; }
         const std::byte* next() const { return next_; }
 
         class children_range;
@@ -89,8 +89,9 @@ class DIE::children_range {
 
                const DIE& operator*() const { return *die_; }
                const DIE* operator->() const { return &die_.value(); }
-
+                // Pre-Increment
                iterator& operator++();
+               // Post-Increment
                iterator& operator++(int);
 
                bool operator==(const iterator& rhs) const;

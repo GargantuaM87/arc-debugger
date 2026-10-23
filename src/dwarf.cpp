@@ -279,8 +279,50 @@ adb::DIE adb::compile_unit::root() const {
 }
 
 adb::DIE::children_range::iterator::iterator(const adb::DIE& die) {
-
+   cursor next_cur( {die.next_, die.comp_unit_->data().end() });
+   die_ = parse_die(*die.comp_unit_, next_cur);
 }
+
+bool adb::DIE::children_range::iterator::operator==(const iterator& rhs) const {
+    // an iterator is null if it doesn't have a DIE or the stored DIE has an abbrev code of 0
+    auto lhs_null = !die_.has_value() or !die_->abbrev_entry();
+    auto rhs_null = !rhs.die_.has_value() or !rhs.die_->abbrev_entry();
+    if(lhs_null and rhs_null) return true; // if both iterators are null, then naturally, they're equal
+    if (lhs_null or rhs_null) return false; // if only one is null
+
+    // match abbrev codes and next pointers
+    return die_->abbrev_ == rhs->abbrev_ and die_->next() == rhs->next();
+}
+
+adb::DIE::children_range::iterator& adb::DIE::children_range::iterator::operator++() {
+    if(!die_.has_value() or !die_->abbrev_) return *this;
+    // parse the siblings of the DIE
+    if(!die_->abbrev_->has_children) {
+        cursor next_cur( {die_->next_, die_->comp_unit_->data().end()});
+        die_ = parse_die(*die_->comp_unit_, next_cur);
+    }
+    // parse children of the DIE
+    else {
+        iterator sub_children(*die_); // advance over children until we hit null terminator
+        while (sub_children->abbrev_) ++sub_children;
+
+        cursor next_cur( {sub_children->next_, die_->comp_unit_->data().end()} );
+        die_ = parse_die(*die_->comp_unit_, next_cur);
+    }
+    return *this;
+}
+
+adb::DIE::children_range::iterator& adb::DIE::children_range::iterator::operator++(int) {
+    auto temp = *this;
+    ++(*this);
+    return temp;
+}
+
+adb::DIE::children_range adb::DIE::children() const {
+    return children_range(*this);
+}
+
+
 
 
 
