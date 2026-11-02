@@ -25,6 +25,30 @@ namespace adb {
         std::vector<attr_spec> attr_specs;
     };
 
+ class compile_unit;
+ class DIE;
+ class attr {
+     public:
+         attr(const compile_unit* comp_unit, std::uint64_t type, std::uint64_t form, const std::byte* location) : comp_unit_(comp_unit), type_(type), form_(form), location_(location) {}
+
+         std::uint64_t name() const { return type_; }
+         std::uint64_t form() const { return form_; }
+
+         file_addr as_address() const;
+         std::uint32_t as_section_offset() const;
+         span<const std::byte> as_block() const;
+         std::uint64_t as_int() const;
+         std::string_view as_string() const;
+         DIE as_reference() const;
+
+
+     private:
+         const compile_unit* comp_unit_;
+         std::uint64_t type_;
+         std::uint64_t form_;
+         const std::byte* location_;
+ };
+
  class dwarf;
  class DIE;
     class compile_unit {
@@ -59,6 +83,10 @@ class DIE {
 
         class children_range;
         children_range children() const;
+        // Whether a DIE contains an attribute of the specified type.
+        bool contains(std::uint64_t attribute) const;
+        // Retrieve value of an attribute.
+        attr operator[](std::uint64_t attribute) const;
 
     private:
         const std::byte* pos_ = nullptr;

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <iterator>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <algorithm>
@@ -322,10 +323,138 @@ adb::DIE::children_range adb::DIE::children() const {
     return children_range(*this);
 }
 
+bool adb::DIE::contains(std::uint64_t attribute) const {
+    auto& specs = abbrev_->attr_specs;
+    return std::find_if(begin(specs), end(specs),
+            [=](auto spec) { return spec.attr == attribute; }) != end(specs);
+}
 
+adb::attr adb::DIE::operator[](std::uint64_t attribute) const {
+    auto& specs = abbrev_->attr_specs;
+    for( std::size_t i = 0; i < specs.size(); ++i) {
+        if(specs[i].attr == attribute) {
+            // pointer to compilation unit, attribute's type, attribute's form, and where the bytes for the attribute's value begin
+            return { comp_unit_, specs[i].attr, specs[i].form, attr_locs_[i] };
+        }
+    }
+    error::send("Attribute not found");
+}
 
+adb::file_addr adb::attr::as_address() const {
+    cursor cur( {location_, comp_unit_->data().end()} );
 
+    if(form_ != DW_FORM_addr) error::send("Invalid address type");
+    auto elf = comp_unit_->dwarf_info()->elf_file();
+    return file_addr{*elf, cur.u64()};
+}
 
+std::uint32_t adb::attr::as_section_offset() const {
+    cursor cur( {location_, comp_unit_->data().end() } );
 
+    if(form_ != DW_FORM_sec_offset) error::send("Invalid section offset type");
+    return cur.u32();
+}
 
+std::uint64_t adb::attr::as_int() const {
+    cursor cur( {location_, comp_unit_->data().end() });
+    switch (form_) {
+        case DW_FORM_data1:
+            return cur.u8();
+        case DW_FORM_data2:
+            return cur.u16();
+        case DW_FORM_data4:
+            return cur.u32();
+        case DW_FORM_data8:
+            return cur.u64();
+        case DW_FORM_udata:
+            return cur.uleb128();
+        default:
+            error::send("Invalid integer type");
+    }
+}
+
+adb::span<const std::byte> adb::attr::as_block() const {
+    std::size_t size;
+
+    cursor cur( {location_, comp_unit_->data().end() });
+
+    switch(form_) {
+        case DW_FORM_block1:
+            size = cur.u8();
+            break;
+        case DW_FORM_block2:
+            size = cur.u16();
+            break;
+        case DW_FORM_block4:
+            size = cur.u32();
+            break;
+        case DW_FORM_block:
+            size = cur.uleb128();
+            break;
+        default:
+            error::send("Invalid block type");
+    }
+    return { cur.position(), size};
+}
+
+adb::DIE adb::attr::as_reference() const {
+    cursor cur( {location_, comp_unit_->data().end()} );
+    std::size_t offset; // based on the start of the current DIE's compile unit
+
+    switch (form_) {
+        case DW_FORM_ref1:
+            offset = cur.u8();
+            break;
+        case DW_FORM_ref2:
+            offset = cur.u16();
+            break;
+        case DW_FORM_ref4:
+            offset = cur.u32();
+            break;
+        case DW_FORM_ref8:
+            offset = cur.u64();
+            break;
+        case DW_FORM_udata:
+            offset = cur.uleb128();
+            break;
+        // reference data in other compile units, so its offset is relative to .debug_info
+        case DW_FORM_ref_addr:
+            {
+                offset = cur.u32();
+                auto section = comp_unit_->dwarf_info()->elf_file()->get_section_contents(".debug_info");
+                // get the position in bytes?
+                auto die_pos = section.begin() + offset; // calculate position of referenced DIE
+                auto& comp_units = comp_unit_->dwarf_info()->compile_units();
+                // look for the compile unit whose data range includes the DIE we're looking for
+                auto cu_finder = [=](auto& cu) {
+                    return cu->data().begin() <= die_pos and cu->data().end() > die_pos;
+                };
+
+                auto cu_for_offet = std::find_if(begin(comp_units), end(comp_units), cu_finder);
+                cursor ref_cur( {die_pos, cu_for_offet->get()->data().end()} );
+                return parse_die(**cu_for_offet, ref_cur);
+            }
+        default:
+            error::send("Invalid reference type");
+    }
+
+    cursor ref_cur( {comp_unit_->data().begin() + offset, comp_unit_->data().end()} );
+    return parse_die(*comp_unit_, ref_cur); // parse DIE at position given with offset
+}
+
+std::string_view adb::attr::as_string() const {
+    cursor cur({location_, comp_unit_->data().end()});
+    switch (form_) {
+        case DW_FORM_string:
+            return cur.string();
+        case DW_FORM_strp: {
+                               auto offset = cur.u32();
+                               auto strtab = comp_unit_->dwarf_info()->elf_file()->get_section_contents(".debug_str");
+                               cursor strtab_cur( {strtab.begin() + offset, strtab.end()} );
+                               return strtab_cur.string();
+                           }
+        default:
+            error::send("Invalid string type");
+    }
+}
 
