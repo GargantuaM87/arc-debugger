@@ -302,6 +302,9 @@ adb::DIE::children_range::iterator& adb::DIE::children_range::iterator::operator
         cursor next_cur( {die_->next_, die_->comp_unit_->data().end()});
         die_ = parse_die(*die_->comp_unit_, next_cur);
     }
+    else if(die_->contains(DW_AT_sibling)) {
+        die_ = die_.value()[DW_AT_sibling].as_reference();
+    }
     // parse children of the DIE
     else {
         iterator sub_children(*die_); // advance over children until we hit null terminator
