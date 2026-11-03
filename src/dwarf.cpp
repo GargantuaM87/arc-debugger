@@ -343,6 +343,27 @@ adb::attr adb::DIE::operator[](std::uint64_t attribute) const {
     error::send("Attribute not found");
 }
 
+adb::file_addr adb::DIE::low_pc() const {
+    return (*this)[DW_AT_low_pc].as_address(); // always a file address. Points to the ELF file that contains this DWARF informaton.
+}
+
+adb::file_addr adb::DIE::high_pc() const {
+    auto attr = (*this)[DW_AT_high_pc];
+    std::uint64_t addr;
+    // directly extract the address
+    if(attr.form() == DW_FORM_addr) {
+        addr = attr.as_address();
+    }
+    // form is an offset from the low program counter
+    else {
+        addr = low_pc() + attr.as_int();
+    }
+
+    return file_addr {
+        *comp_unit_->dwarf_info()->elf_file(), addr
+    };
+}
+
 adb::file_addr adb::attr::as_address() const {
     cursor cur( {location_, comp_unit_->data().end()} );
 

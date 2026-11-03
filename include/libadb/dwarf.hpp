@@ -88,6 +88,9 @@ class DIE {
         // Retrieve value of an attribute.
         attr operator[](std::uint64_t attribute) const;
 
+        file_addr low_pc() const;
+        file_addr high_pc() const;
+
     private:
         const std::byte* pos_ = nullptr;
         const compile_unit* comp_unit_ = nullptr;
