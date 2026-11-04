@@ -352,11 +352,11 @@ adb::file_addr adb::DIE::high_pc() const {
     std::uint64_t addr;
     // directly extract the address
     if(attr.form() == DW_FORM_addr) {
-        addr = attr.as_address();
+        addr = attr.as_address().addr();
     }
     // form is an offset from the low program counter
     else {
-        addr = low_pc() + attr.as_int();
+        addr = low_pc().addr() + attr.as_int();
     }
 
     return file_addr {

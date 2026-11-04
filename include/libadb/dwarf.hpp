@@ -25,7 +25,34 @@ namespace adb {
         std::vector<attr_spec> attr_specs;
     };
 
+
  class compile_unit;
+ class range_list {
+     public:
+         range_list(const compile_unit* cu, span<const std::byte> data, file_addr base_address) : comp_unit_(cu), data_(data), base_addr_(base_address) {}
+
+         struct entry {
+             file_addr low;
+             file_addr high;
+
+             bool contains(file_addr addr) const {
+                 return low <= addr and addr < high;
+             }
+         };
+
+         class iterator;
+         iterator begin() const;
+         iterator end() const;
+
+         bool contains(file_addr addr) const;
+
+     private:
+             const compile_unit* comp_unit_;
+             span<const std::byte> data_;
+             file_addr base_addr_;
+
+};
+
  class DIE;
  class attr {
      public:
