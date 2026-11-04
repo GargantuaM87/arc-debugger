@@ -482,3 +482,37 @@ std::string_view adb::attr::as_string() const {
     }
 }
 
+adb::range_list::iterator::iterator(const compile_unit* cu, adb::span<const std::byte> data, file_addr base_address) : comp_unit_(cu), data_(data), base_addr_(base_address), pos_(data.begin()) {
+    ++(*this);
+}
+
+adb::range_list::iterator& adb::range_list::iterator::operator++() {
+    auto elf = comp_unit_->dwarf_info()->elf_file();
+    constexpr auto base_address_flag = ~static_cast<std::uint64_t>(0);
+
+    cursor cur( {pos_, data_.end()} );
+    while(true) {
+        current_.low = file_addr{ *elf, cur.u64() };
+        current_.high = file_addr { *elf, cur.u64() };
+
+        if(current_.low.addr() == base_address_flag) {
+            base_addr_ = current_.high;
+        }
+
+        else if(current_.low.addr() == 0 and current_.high.addr() == 0) {
+            pos_ = nullptr;
+            break;
+        }
+
+        else {
+            pos_ = cur.position();
+            current_.low += base_addr_.addr();
+            current_.high += base_addr_.addr();
+            break;
+        }
+
+    }
+    return *this;
+}
+
+

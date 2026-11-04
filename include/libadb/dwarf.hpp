@@ -53,6 +53,38 @@ namespace adb {
 
 };
 
+ class range_list::iterator {
+     public:
+         using value_type = entry;
+         using reference = const entry&;
+         using pointer = const entry*;
+         using difference_type = std::ptrdiff_t;
+         using iterator_category = std::forward_iterator_tag;
+
+         iterator(const compile_unit* cu, span<const std::byte> data, file_addr base_addr);
+
+         iterator() = default;
+         iterator(const iterator&) = default;
+         iterator& operator=(const iterator&) = default;
+
+         const entry& operator*() const { return current_; }
+         const entry* operator->() const { return &current_; }
+
+         bool operator==(iterator rhs) const { return pos_ == rhs.pos_; }
+         bool operator !=(iterator rhs) const { return pos_ != rhs.pos_; }
+
+         iterator& operator++();
+         iterator operator++(int);
+
+    private:
+         const compile_unit* comp_unit_ = nullptr;
+         span<const std::byte> data_{ nullptr, nullptr };
+         file_addr base_addr_;
+         const std::byte* pos_ = nullptr;
+         entry current_;
+
+ };
+
  class DIE;
  class attr {
      public:
